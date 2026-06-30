@@ -1,0 +1,145 @@
+import { useTranslation } from 'react-i18next';
+import { FiCopy } from 'react-icons/fi';
+import ActionsDropdown from './ActionsDropdown';
+import './UserTable.css';
+
+const UserTable = ({ users, onDelete, onDownload, onEdit, onToggleStatus, onResetUsage, getSubscriptionLink }) => {
+  const { t } = useTranslation();
+
+  const formatTrafficGB = (bytes) => {
+    if (bytes === null || bytes === undefined) return '-';
+    const gb = Number(bytes) / 1024 / 1024 / 1024;
+    if (!Number.isFinite(gb)) return '-';
+
+    if (gb < 1) {
+      return gb.toFixed(1);
+    }
+    // For values >= 1 GB, remove trailing zeros
+    return gb.toFixed(2).replace(/\.00$/, '').replace(/\.0$/, '');
+  };
+
+  const formatTrafficUsage = (used, total) => {
+    const unlimited = t('unlimited', '∞');
+    const usedText = formatTrafficGB(used);
+    // total null/undefined means unlimited traffic.
+    if (total === null || total === undefined) {
+      return usedText === '-' ? `0 / ${unlimited}` : `${usedText} / ${unlimited}`;
+    }
+    const totalText = formatTrafficGB(total);
+    if (usedText === '-' && totalText === '-') return '-';
+    if (usedText === '-') return `- / ${totalText} GB`;
+    if (totalText === '-') return `${usedText} / -`;
+    return `${usedText} / ${totalText} GB`;
+  };
+
+  const handleCopyLink = (user) => {
+    if (!getSubscriptionLink) return;
+    const link = getSubscriptionLink(user) || '';
+
+    if (navigator.clipboard && window.isSecureContext) {
+      navigator.clipboard.writeText(link).then(() => {
+        window.alert(t('copied_subscription_link', 'Subscription link copied!'));
+      }).catch(() => {
+        fallbackCopyTextToClipboard(link);
+      });
+    } else {
+      fallbackCopyTextToClipboard(link);
+    }
+  };
+
+  // Fallback for insecure context (http)
+  function fallbackCopyTextToClipboard(text) {
+    const textArea = document.createElement('textarea');
+    textArea.value = text;
+    textArea.style.position = 'fixed';
+    textArea.style.top = 0;
+    textArea.style.left = 0;
+    textArea.style.width = '2em';
+    textArea.style.height = '2em';
+    textArea.style.padding = 0;
+    textArea.style.border = 'none';
+    textArea.style.outline = 'none';
+    textArea.style.boxShadow = 'none';
+    textArea.style.background = 'transparent';
+    document.body.appendChild(textArea);
+    textArea.select();
+    try {
+      document.execCommand('copy');
+      window.alert(t('copied_subscription_link', 'Subscription link copied!'));
+    } catch (err) {
+      window.alert(t('copy_failed', 'Failed to copy link.'));
+    }
+    document.body.removeChild(textArea);
+  }
+
+  return (
+    <div className="table-container">
+      <table>
+        <thead>
+          <tr>
+            <th>{t('th_username')}</th>
+            <th>{t('th_expiryDate')}</th>
+            <th>{t('th_totalTraffic')}</th>
+            <th>{t('th_maxLogins')}</th>
+            <th>{t('th_status')}</th>
+            <th>{t('th_owner')}</th>
+            <th>{t('th_actions')}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {users.length === 0 ? (
+            <tr><td colSpan="7" style={{ textAlign: 'center' }}>{t('noUsersFound')}</td></tr>
+          ) : (
+            users.map((user) => (
+              <tr key={user.name}>
+                <td>{user.name}</td>
+                <td>{new Date(user.expiry_date).toLocaleDateString('en-CA')}</td>
+                <td>{formatTrafficUsage(user.used, user.total)}</td>
+                <td>{Number(user.max_logins) === 0 ? t('unlimited', '∞') : user.max_logins}</td>
+                <td>
+                  <span className={`status-${user.is_active ? 'active' : 'inactive'}`}>
+                    {user.is_active ? t('status_active') : t('status_inactive')}
+                  </span>
+                </td>
+                <td>{user.owner}</td>
+                <td style={{ textAlign: 'right', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <ActionsDropdown
+                    actions={[
+                      { label: t('editButton'), onClick: () => onEdit(user) },
+                      { label: t('downloadButton'), onClick: () => onDownload(user) },
+                      {
+                        label: t('resetUsageButton', 'Reset Usage'),
+                        onClick: () => onResetUsage && onResetUsage(user),
+                        className: 'secondary-action',
+                      },
+                      {
+                        label: user.is_active ? t('deactivateButton', 'Deactivate') : t('activateButton', 'Activate'),
+                        onClick: () => onToggleStatus(user),
+                        className: user.is_active ? 'warning-action' : 'success-action',
+                      },
+                      {
+                        label: t('deleteButton'),
+                        onClick: () => onDelete(user.uuid, user.name),
+                        className: 'danger-action',
+                      },
+                    ]}
+                  />
+                  <button
+                    className="icon-btn btn-copy"
+                    title={t('copySubscriptionLink', 'Copy Link')}
+                    onClick={() => handleCopyLink(user)}
+                    style={{ background: 'none', border: 'none', padding: 0, marginLeft: 6, cursor: 'pointer' }}
+                  >
+                    <FiCopy style={{ fontSize: 20, color: '#90caf9' }} />
+                  </button>
+                </td>
+              </tr>
+            ))
+          )}
+        </tbody>
+      </table>
+    </div>
+  );
+};
+
+export default UserTable;

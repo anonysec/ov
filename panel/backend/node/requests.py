@@ -1,0 +1,179 @@
+import requests
+from fastapi.responses import Response
+from backend.logger import logger
+
+
+class NodeRequests:
+    """Handles requests to the node API."""
+
+    def __init__(
+        self,
+        address: str,
+        port: int,
+        api_key: str,
+        tunnel_address: str = "ovpanel.com",
+        protocol: str = "tcp",
+        ovpn_port: int = 1194,
+        set_new_setting: bool = False,
+    ):
+        self.address = f"{address}:{port}"
+        self.headers = {"key": api_key}
+        self.tunnel_address = tunnel_address
+        self.protocol = protocol
+        self.ovpn_port = ovpn_port
+        self.set_new_setting = set_new_setting
+
+    def check_node(self) -> bool:
+        """Checks the node status and sets new settings if necesary."""
+        api = f"http://{self.address}/sync/status"
+        try:
+            data = {
+                "tunnel_address": self.tunnel_address,
+                "protocol": self.protocol,
+                "ovpn_port": self.ovpn_port,
+                "set_new_setting": self.set_new_setting,
+            }
+            response = requests.get(
+                api, headers=self.headers, json=data, timeout=5
+            ).json()
+            if response.get("success"):
+                return True
+            else:
+                logger.error(f"Node {self.address} is not reachable")
+                return False
+        except Exception as e:
+            logger.error(f"Error checking node {self.address}: {e}")
+            return False
+
+    def get_node_info(self) -> dict:
+        api = f"http://{self.address}/sync/status"
+        try:
+            data = {
+                "tunnel_address": self.tunnel_address,
+                "protocol": self.protocol,
+                "ovpn_port": self.ovpn_port,
+                "set_new_setting": self.set_new_setting,
+            }
+            response = requests.get(
+                api, headers=self.headers, json=data, timeout=10
+            ).json()
+            if response.get("success"):
+                return response.get("data")
+            else:
+                logger.error(
+                    f"Failed to get node info on {self.address}: {response.get('msg')}"
+                )
+                return {}
+        except Exception as e:
+            logger.error(f"Error getting node info on {self.address}: {e}")
+            return {}
+
+    def create_user(self, name: str, max_logins: int = 1) -> bool:
+        api = f"http://{self.address}/sync/user"
+        data = {"name": name, "max_logins": max_logins}
+        try:
+            response = requests.post(
+                api, headers=self.headers, json=data, timeout=25
+            ).json()
+            if response.get("success"):
+                return True
+            else:
+                logger.error(
+                    f"Failed to create user on node {self.address}: {response.get('msg')}"
+                )
+                return False
+        except Exception as e:
+            logger.error(f"Error creating user on node {self.address}: {e}")
+            return False
+
+    def change_user_status(self, name, status, max_logins: int | None = None):
+        api = f"http://{self.address}/sync/user"
+        try:
+            data = {"name": name, "status": "activate" if status else "deactivate"}
+            if max_logins is not None:
+                data["max_logins"] = max_logins
+            response = requests.put(
+                api, headers=self.headers, json=data, timeout=10
+            ).json()
+
+            if response.get("success"):
+                return True
+            else:
+                logger.error(
+                    f"Failed to change user status on node {self.address}: {response.get('msg')}"
+                )
+                return False
+        except Exception as e:
+            logger.error(f"Error change user status on node {self.address}: {e}")
+            return False
+
+    def download_ovpn_client(self, name: str) -> Response:
+        api = f"http://{self.address}/sync/download/ovpn/{name}"
+        try:
+            response = requests.get(api, headers=self.headers, timeout=25)
+            if response.status_code == 200:
+                return Response(
+                    content=response.content,
+                    media_type="application/x-openvpn-profile",
+                    headers={
+                        "Content-Disposition": f"attachment; filename={name}.ovpn"
+                    },
+                )
+        except Exception as e:
+            logger.error(f"Error downloading OVPN client from node {self.address}: {e}")
+        return None
+
+    def delete_user(self, name: str) -> bool:
+        api = f"http://{self.address}/sync/user/{name}"
+        try:
+            response = requests.delete(
+                api, headers=self.headers, timeout=25
+            ).json()
+            if response.get("success"):
+                return True
+            else:
+                logger.error(
+                    f"Failed to delete user on node {self.address}: {response.get('msg')}"
+                )
+                return False
+        except Exception as e:
+            logger.error(f"Error deleting user on node {self.address}: {e}")
+            return False
+
+    def set_user_limit(self, name: str, max_logins: int) -> bool:
+        """Set the maximum simultaneous logins/devices for a user on the node.
+
+        max_logins: 1 = single login, 0 = unlimited.
+        """
+        api = f"http://{self.address}/sync/user/limit"
+        data = {"name": name, "max_logins": max_logins}
+        try:
+            response = requests.put(
+                api, headers=self.headers, json=data, timeout=10
+            ).json()
+            if response.get("success"):
+                return True
+            else:
+                logger.error(
+                    f"Failed to set user limit on node {self.address}: {response.get('msg')}"
+                )
+                return False
+        except Exception as e:
+            logger.error(f"Error setting user limit on node {self.address}: {e}")
+            return False
+
+    def get_users_usage(self) ->dict | bool:
+        api = f"http://{self.address}/sync/usage"
+        try:
+            response = requests.get(api, headers=self.headers, timeout=25).json()
+            if response.get("success"):
+                logger.info(f"get users usage on node {self.address}: {response.get('msg')}")
+                return response.get("data")
+            else:
+                logger.error(
+                    f"Failed to get users usage on node {self.address}: {response.get('msg')}"
+                )
+                return False
+        except Exception as e:
+            logger.error(f"Error when getting users usage on node {self.address}: {e}")
+            return False
