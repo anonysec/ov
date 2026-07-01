@@ -392,7 +392,8 @@ def menu():
     print("Welcome to the OV-Node Installer")
     print("=" * 34 + Style.RESET_ALL)
     print()
-    print("Please choose an option:\n")
+    print("Please choose an option:
+")
     print("  1. Install")
     print("  2. Update")
     print("  3. Restart")
