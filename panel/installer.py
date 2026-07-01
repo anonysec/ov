@@ -14,7 +14,7 @@ from colorama import Fore, Style, init
 
 init(autoreset=True)
 
-VERSION = "1.3.0"
+VERSION = "1.3.1"
 APP_NAME = "ov-panel"
 INSTALL_DIR = Path(f"/opt/{APP_NAME}")
 REPO = "anonysec/ov"

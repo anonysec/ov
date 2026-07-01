@@ -12,7 +12,18 @@ from backend.db.models import Node
 
 
 async def add_node_handler(request: NodeCreate, db: Session) -> bool:
-    new_node = NodeRequests(
+    """Validate and store a node.
+
+    This should be quick: it only checks node reachability/settings once and does
+    not create users. User creation on nodes is done lazily on first download (or
+    when explicitly syncing), which avoids the UI hanging when many users exist.
+    """
+    existing = crud.get_node_by_name(db, request.name)
+    if existing:
+        logger.warning("Node name already exists: %s", request.name)
+        return False
+
+    node_req = NodeRequests(
         request.address,
         request.port,
         request.key,
@@ -21,49 +32,40 @@ async def add_node_handler(request: NodeCreate, db: Session) -> bool:
         request.ovpn_port,
         request.set_new_setting,
     )
-    # check_node() does blocking HTTP; keep it off the event loop.
-    if await run_in_threadpool(new_node.check_node):
+    if await run_in_threadpool(node_req.check_node):
         crud.create_node(db, request)
         logger.info(f"Node added successfully: {request.address}:{request.port}")
         return True
-    else:
-        logger.warning(f"Failed to add node: {request.address}:{request.port}")
-        return False
 
+    logger.warning(f"Failed to add node: {request.address}:{request.port}")
+    return False
 
 async def update_node_handler(node_id: int, request: NodeCreate, db: Session) -> bool:
-    """Update a node + force full config + multi-login sync"""
-    crud.update_node(db, node_id, request)
+    """Update a node and apply OpenVPN server settings on that node."""
+    current = crud.get_node_by_id(db, node_id)
+    if not current:
+        return False
 
+    api_key = request.key or current.key
     node_req = NodeRequests(
         address=request.address,
         port=request.port,
-        api_key=request.key,
+        api_key=api_key,
         tunnel_address=request.tunnel_address,
         protocol=request.protocol,
         ovpn_port=request.ovpn_port,
         set_new_setting=True,
     )
 
-    # 1. Apply new server settings + multi-login scripts
-    await run_in_threadpool(node_req.check_node)
+    # Validate/apply settings before saving. If the new address/key is wrong,
+    # do not poison the database with unreachable node data.
+    if not await run_in_threadpool(node_req.check_node):
+        logger.warning("Failed to update node; new node settings are unreachable: %s:%s", request.address, request.port)
+        return False
 
-    # 2. Push every user's max_logins + re-create users on the node.
-    # This is critical so multi-login works after port/protocol change.
-    try:
-        from backend.db import crud as db_crud
-        users = db_crud.get_all_users(db)
-        for u in users:
-            max_l = getattr(u, 'max_logins', 1) or 1
-            cn = f"{u.name}-{request.name}"
-            await run_in_threadpool(node_req.set_user_limit, cn, max_l)
-            await run_in_threadpool(node_req.create_user, cn, max_l)
-    except Exception as e:
-        logger.warning(f"Could not push max_logins after node edit: {e}")
-
-    logger.info(f"Node updated + multi-login limits pushed: {request.address}:{request.port}")
+    crud.update_node(db, node_id, request)
+    logger.info(f"Node updated: {request.address}:{request.port}")
     return True
-
 
 async def delete_node_handler(node_id: int, db: Session) -> bool:
     """Delete a node"""
@@ -92,7 +94,7 @@ async def list_nodes_handler(db: Session) -> list:
             "protocol": node.protocol,
             "port": node.port,
             "key": node.key,
-            "status": "active" if node.status else "inactive",
+            "status": bool(node.status),
         }
         nodes_list.append(node_info)
     return nodes_list
@@ -209,17 +211,35 @@ async def download_ovpn_client_from_node(
     node_request = NodeRequests(
         address=node.address, port=node.port, api_key=node.key
     )
-    # Blocking HTTP -> threadpool.
+    client_name = f"{user.name}-{node.name}"
+
+    # Make sure the client exists before downloading. Creating users through
+    # OpenVPN's bash installer can be slow, especially on the first request, so
+    # keep it off the event loop and allow a longer download timeout below.
+    try:
+        await run_in_threadpool(
+            node_request.create_user,
+            client_name,
+            user.max_logins if user.max_logins is not None else 1,
+        )
+        await run_in_threadpool(
+            node_request.set_user_limit,
+            client_name,
+            user.max_logins if user.max_logins is not None else 1,
+        )
+    except Exception as e:
+        logger.warning(f"Could not pre-create/sync user '{client_name}' before download: {e}")
+
+    # Blocking HTTP -> threadpool. Use a longer timeout because a node may need
+    # to generate the .ovpn file on-demand.
     result = await run_in_threadpool(
-        node_request.download_ovpn_client, f"{user.name}-{node.name}"
+        node_request.download_ovpn_client,
+        client_name,
+        120,
     )
     if result:
-        # Ensure the node knows this user's simultaneous-login limit.
-        await run_in_threadpool(
-            node_request.set_user_limit, f"{user.name}-{node.name}", user.max_logins
-        )
         logger.info(
-            f"OVPN client downloaded for user '{user.name}-{node.name}' on node {node.address}:{node.port}"
+            f"OVPN client downloaded for user '{client_name}' on node {node.address}:{node.port}"
         )
         return result
     return None

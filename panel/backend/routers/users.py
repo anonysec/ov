@@ -61,24 +61,25 @@ async def create_user(
     db: Session = Depends(get_db),
     user: dict = Depends(get_current_user),
 ):
-    check_user = crud.get_user_by_name(db, request.name)
+    # Normalize exactly as the DB layer does before checking duplicates and
+    # before using the name to create node-side CNs.
+    normalized_name = request.name.replace(" ", "_")
+    check_user = crud.get_user_by_name(db, normalized_name)
     if check_user is not None:
         return ResponseModel(
             success=False, msg="User with this name already exists", data=None
         )
 
-    if user["type"] == "admin":
-        new_user = crud.create_user(db, request, user["username"])
-    else:
-        new_user = crud.create_user(db, request, "owner")
+    owner = user["username"] if user["type"] == "admin" else "owner"
+    new_user = crud.create_user(db, request, owner)
 
-    # Create the user on all nodes + push the max_logins limit immediately
-    from backend.node.task import create_user_on_all_nodes, set_user_limit_on_all_nodes
-    await create_user_on_all_nodes(request.name, db, request.max_logins)
-    await set_user_limit_on_all_nodes(request.name, request.max_logins, db)
-
+    # Do NOT synchronously create the user on every node here. The OpenVPN client
+    # generation script is slow and can make the Add User popup look stuck.
+    # The node-side client/config is created lazily when Download is clicked.
     return ResponseModel(
-        success=True, msg="User created successfully", data=request.name
+        success=True,
+        msg="User created successfully. VPN config will be generated on first download.",
+        data=Users.model_validate(new_user),
     )
 
 

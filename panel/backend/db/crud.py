@@ -208,6 +208,7 @@ def update_node(db: Session, node_id: int, request: NodeCreate):
         raise HTTPException(status_code=404, detail="Node not found")
 
     node.name = request.name
+    node.address = request.address
     node.tunnel_address = request.tunnel_address
     node.ovpn_port = request.ovpn_port
     node.protocol = request.protocol

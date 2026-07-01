@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse
 import psutil
 from core.schema.all_schemas import User, UserLimit, ResponseModel, SetSettingsModel
@@ -114,5 +114,4 @@ async def download_ovpn(client_name: str, api_key: str = Depends(check_api_key))
             filename=f"{client_name}.ovpn",
             media_type="application/x-openvpn-profile",
         )
-    else:
-        return ResponseModel(success=False, msg="OVPN file not found", data=None)
+    raise HTTPException(status_code=404, detail="OVPN file not found")

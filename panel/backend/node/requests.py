@@ -76,9 +76,13 @@ class NodeRequests:
         api = f"{self.scheme}://{self.address}/sync/user"
         data = {"name": name, "max_logins": max_logins}
         try:
-            response = requests.post(
-                api, headers=self.headers, json=data, timeout=25
-            ).json()
+            resp = requests.post(
+                api, headers=self.headers, json=data, timeout=180
+            )
+            if resp.status_code != 200:
+                logger.error(f"Node {self.address} create_user returned HTTP {resp.status_code}: {resp.text[:200]}")
+                return False
+            response = resp.json()
             if response.get("success"):
                 return True
             else:
@@ -96,9 +100,13 @@ class NodeRequests:
             data = {"name": name, "status": "activate" if status else "deactivate"}
             if max_logins is not None:
                 data["max_logins"] = max_logins
-            response = requests.put(
-                api, headers=self.headers, json=data, timeout=10
-            ).json()
+            resp = requests.put(
+                api, headers=self.headers, json=data, timeout=60
+            )
+            if resp.status_code != 200:
+                logger.error(f"Node {self.address} change_user_status returned HTTP {resp.status_code}: {resp.text[:200]}")
+                return False
+            response = resp.json()
 
             if response.get("success"):
                 return True
@@ -111,13 +119,13 @@ class NodeRequests:
             logger.error(f"Error change user status on node {self.address}: {e}")
             return False
 
-    def download_ovpn_client(self, name: str) -> Response:
+    def download_ovpn_client(self, name: str, timeout: int = 120) -> Response:
         api = f"{self.scheme}://{self.address}/sync/download/ovpn/{name}"
         try:
             response = requests.get(
                 api,
                 headers={**self.headers, "Accept": "application/x-openvpn-profile,text/plain,*/*"},
-                timeout=25,
+                timeout=timeout,
             )
             content_type = (response.headers.get("content-type") or "").lower()
             text_start = response.content[:512].decode("utf-8", errors="ignore").lstrip().lower()
@@ -172,9 +180,13 @@ class NodeRequests:
         api = f"{self.scheme}://{self.address}/sync/user/limit"
         data = {"name": name, "max_logins": max_logins}
         try:
-            response = requests.put(
-                api, headers=self.headers, json=data, timeout=10
-            ).json()
+            resp = requests.put(
+                api, headers=self.headers, json=data, timeout=60
+            )
+            if resp.status_code != 200:
+                logger.error(f"Node {self.address} set_user_limit returned HTTP {resp.status_code}: {resp.text[:200]}")
+                return False
+            response = resp.json()
             if response.get("success"):
                 return True
             else:
