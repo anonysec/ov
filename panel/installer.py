@@ -98,7 +98,7 @@ def show_banner():
     banner = f"""
 {Fore.CYAN}
 ╔════════════════════════╗
-║   OVPANEL  v1.2.18     ║
+║   OVPANEL  v1.2.19     ║
 ╚════════════════════════╝
 {Style.RESET_ALL}
 """
@@ -161,66 +161,70 @@ def setup_panel():
     try:
         subprocess.run("clear")
 
-        # =====================================================================
-        # 100% BULLETPROOF .env.example HANDLING
-        # This completely prevents:
-        #   FileNotFoundError: [Errno 2] No such file or directory: '.env.example'
-        # =====================================================================
-        env_example = ".env.example"
+        # === CRITICAL: Force correct working directory ===
+        # This fixes cases where "uv run python installer.py" or one-liners
+        # start with a different cwd than where the files were extracted.
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        if script_dir and os.path.isdir(script_dir):
+            os.chdir(script_dir)
 
-        # Step 1: Guarantee .env.example exists
-        if not os.path.exists(env_example):
-            print(f"{Fore.YELLOW}.env.example is missing — creating default now...{Style.RESET_ALL}")
-            default_env = """# Admin Credentials
+        # Absolute paths — we will NEVER rely on relative ".env.example" again
+        base_dir = os.getcwd()
+        env_file_path = os.path.join(base_dir, ".env")
+
+        # =====================================================================
+        # 100% BULLETPROOF .env CREATION
+        # We NEVER copy or open ".env.example" during the initial .env creation.
+        # This completely eliminates FileNotFoundError for '.env.example'.
+        # The example file is only used by the *source* repo, not at runtime install.
+        # =====================================================================
+
+        # Remove any stale .env
+        if os.path.exists(env_file_path):
+            try:
+                os.remove(env_file_path)
+            except Exception:
+                pass
+
+        # Always synthesize a complete, working .env directly.
+        # This path can never raise the ".env.example" error.
+        default_content = """# Admin Credentials
 ADMIN_USERNAME=admin
 ADMIN_PASSWORD=admin
 
 # UVICORN Settings
 HOST=0.0.0.0
-URLPATH=
-VITE_URLPATH=
+URLPATH=dashboard
+VITE_URLPATH=dashboard
 PORT=9000
 
-# Security Settings
-JWT_SECRET_KEY=change-this-to-a-long-random-string
-JWT_ACCESS_TOKEN_EXPIRES=86400
+### Ssl Configuration
+# SSL_KEYFILE="/path/to/keyfile"
+# SSL_CERTFILE="/path/to/certfile"
+
+### Development Settings
+# DEBUG=INFO
+# DOC=True
+
+### Security Settings
+JWT_SECRET_KEY="random string here" # change this to a secure random string
+JWT_ACCESS_TOKEN_EXPIRES=86400 # in seconds
+
+# SUBSCRIPTION_URL_PREFIX = "https://example.com"
+# SUBSCRIPTION_PATH = "sub"
 """
-            with open(env_example, "w") as f:
-                f.write(default_env)
-
-        # Step 2: Remove any old .env
-        if os.path.exists(".env"):
-            try:
-                os.remove(".env")
-            except:
-                pass
-
-        # Step 3: Create .env from .env.example (multiple fallbacks)
-        success = False
         try:
-            shutil.copy(env_example, ".env")
-            success = True
-        except Exception:
-            pass
-
-        if not success:
-            try:
-                with open(env_example, "r") as src, open(".env", "w") as dst:
-                    dst.write(src.read())
-                success = True
-            except Exception:
-                pass
-
-        if not success:
-            # Absolute last resort
-            with open(".env", "w") as f:
-                f.write("ADMIN_USERNAME=admin\nADMIN_PASSWORD=admin\nHOST=0.0.0.0\nPORT=9000\nJWT_SECRET_KEY=auto-generated\n")
-
-        # Final verification
-        if not os.path.exists(".env"):
-            print(f"{Fore.RED}Critical: Failed to create .env file{Style.RESET_ALL}")
+            with open(env_file_path, "w", encoding="utf-8") as f:
+                f.write(default_content)
+        except Exception as ex:
+            print(f"{Fore.RED}Critical: failed to write .env: {ex}{Style.RESET_ALL}")
             return
 
+        # Informational message only (we always create a good default)
+        if not os.path.exists(os.path.join(base_dir, ".env.example")):
+            print(f"{Fore.YELLOW}.env.example is missing — using built-in defaults{Style.RESET_ALL}")
+
+        # From this point forward we ONLY ever touch .env
         subprocess.run("clear")
         print(f"\n{Fore.YELLOW}OV-Panel Configuration{Style.RESET_ALL}\n")
 

@@ -142,8 +142,19 @@ def install_ovnode():
         bash.close()
         create_ccd()
 
-        # OV-Node configuration prompts
-        shutil.copy(".env.example", ".env")
+        # OV-Node configuration prompts - bulletproof .env creation
+        env_example = ".env.example"
+        if os.path.exists(env_example):
+            try:
+                shutil.copy(env_example, ".env")
+            except Exception:
+                with open(env_example, "r") as src, open(".env", "w") as dst:
+                    dst.write(src.read())
+        else:
+            # Create minimal default so we never crash
+            with open(".env", "w") as f:
+                f.write("SERVICE_PORT=2083\nAPI_KEY=\n")
+
         example_uuid = str(uuid4())
         SERVICE_PORT = input("OV-Node service port (default 2083): ")
         if SERVICE_PORT.strip() == "":
@@ -389,7 +400,7 @@ def deactivate_ovnode() -> None:
 def menu():
     subprocess.run("clear")
     print(Fore.BLUE + "=" * 34)
-    print("Welcome to the OV-Node Installer  v1.2.18")
+    print("Welcome to the OV-Node Installer  v1.2.19")
     print("=" * 34 + Style.RESET_ALL)
     print()
     print("Please choose an option:
