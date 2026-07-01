@@ -11,7 +11,7 @@ const AddNodeModal = ({ onClose, onNodeCreated }) => {
     tunnel_address: '',
     protocol: 'tcp',
     ovpn_port: 1194,
-    port: 0,
+    port: 2083,
     key: '',
     status: true,
     set_new_setting: true,

@@ -11,7 +11,7 @@ const EditNodeModal = ({ node, onClose, onNodeUpdated }) => {
     tunnel_address: '',
     protocol: 'tcp',
     ovpn_port: 1194,
-    port: 0,
+    port: 2083,
     key: '',
     status: true,
     set_new_setting: true,
@@ -130,7 +130,15 @@ const EditNodeModal = ({ node, onClose, onNodeUpdated }) => {
           </div>
           <div className="input-group">
             <label htmlFor="edit-key">{t('key')}</label>
-            <input type="text" id="edit-key" name="key" value={formData.key} onChange={handleChange} required />
+            <input
+              type="text"
+              id="edit-key"
+              name="key"
+              value={formData.key}
+              onChange={handleChange}
+              placeholder={t('keyKeepExistingHint', 'Existing key — change to overwrite')}
+              required
+            />
           </div>
           <div className="input-group" style={{ flexDirection: 'row', alignItems: 'center', gap: '8px' }}>
             <input type="checkbox" id="edit-status" name="status" checked={formData.status} onChange={handleChange} />

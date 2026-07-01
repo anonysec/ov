@@ -3,7 +3,7 @@ from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
-    service_port: int = 9090
+    service_port: int = 2083
     api_key: str
     debug: str = "WARNING"
     doc: bool = False

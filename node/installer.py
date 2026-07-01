@@ -137,9 +137,9 @@ def install_ovnode():
         # OV-Node configuration prompts
         shutil.copy(".env.example", ".env")
         example_uuid = str(uuid4())
-        SERVICE_PORT = input("OV-Node service port (default 9090): ")
+        SERVICE_PORT = input("OV-Node service port (default 2083): ")
         if SERVICE_PORT.strip() == "":
-            SERVICE_PORT = "9090"
+            SERVICE_PORT = "2083"
         API_KEY = input(f"OV-Node API key (example: {example_uuid}): ")
         if API_KEY.strip() == "":
             API_KEY = example_uuid
@@ -342,6 +342,60 @@ def deactivate_ovnode() -> None:
     subprocess.run(["rm", "-f", "/etc/systemd/system/ov-node.service"])
 
 
+def change_port():
+    """Change the OV-Node service port in .env and restart, without reinstalling."""
+    env_file = "/opt/ov-node/.env"
+    try:
+        if not os.path.exists(env_file):
+            print("OV-Node is not installed.")
+            input("Press Enter to return to the menu...")
+            menu()
+            return
+
+        current = ""
+        with open(env_file, "r") as f:
+            for line in f:
+                if line.strip().replace(" ", "").startswith("SERVICE_PORT="):
+                    current = line.strip().split("=", 1)[1].strip()
+        print(Fore.CYAN + f"Current node port: {current or 'unknown'}" + Style.RESET_ALL)
+
+        new_port = input("New node service port: ").strip()
+        if not new_port.isdigit() or not (1 <= int(new_port) <= 65535):
+            print(Fore.RED + "Invalid port." + Style.RESET_ALL)
+            input("Press Enter to return to the menu...")
+            menu()
+            return
+
+        lines = []
+        found = False
+        with open(env_file, "r") as f:
+            for line in f:
+                if line.strip().replace(" ", "").startswith("SERVICE_PORT="):
+                    lines.append(f"SERVICE_PORT = {new_port}\n")
+                    found = True
+                else:
+                    lines.append(line)
+        if not found:
+            lines.append(f"SERVICE_PORT = {new_port}\n")
+        with open(env_file, "w") as f:
+            f.writelines(lines)
+
+        subprocess.run(["systemctl", "restart", "ov-node"], check=True)
+        print(Fore.GREEN + f"Node port changed to {new_port}." + Style.RESET_ALL)
+        print(
+            Fore.YELLOW
+            + "Remember to update this node's port in the panel too."
+            + Style.RESET_ALL
+        )
+        input("Press Enter to return to the menu...")
+        menu()
+
+    except Exception as e:
+        print(Fore.RED + f"Failed to change port: {e}" + Style.RESET_ALL)
+        input("Press Enter to return to the menu...")
+        menu()
+
+
 def menu():
     subprocess.run("clear")
     print(Fore.BLUE + "=" * 34)
@@ -352,8 +406,9 @@ def menu():
     print("  1. Install")
     print("  2. Update")
     print("  3. Restart")
-    print("  4. Uninstall")
-    print("  5. Exit")
+    print("  4. Change port")
+    print("  5. Uninstall")
+    print("  6. Exit")
     print()
     choice = input(Fore.YELLOW + "Enter your choice: " + Style.RESET_ALL)
 
@@ -364,8 +419,10 @@ def menu():
     elif choice == "3":
         restart_ovnode()
     elif choice == "4":
-        uninstall_ovnode()
+        change_port()
     elif choice == "5":
+        uninstall_ovnode()
+    elif choice == "6":
         print(Fore.GREEN + "\nExiting..." + Style.RESET_ALL)
         sys.exit()
     else:

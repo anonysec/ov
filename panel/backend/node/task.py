@@ -72,9 +72,11 @@ async def list_nodes_handler(db: Session) -> list:
             "name": node.name,
             "address": node.address,
             "tunnel-address": node.tunnel_address,
+            "tunnel_address": node.tunnel_address,
             "ovpn_port": node.ovpn_port,
             "protocol": node.protocol,
             "port": node.port,
+            "key": node.key,
             "status": "active" if node.status else "inactive",
         }
         nodes_list.append(node_info)

@@ -55,8 +55,16 @@ const NodeManagement = () => {
       setNodeInfo(info);
     };
     fetchAllNodeStatus();
-    intervalId = setInterval(fetchAllNodeStatus, 10000);
-    return () => clearInterval(intervalId);
+    // Poll node status less aggressively and only when the tab is visible.
+    const tick = () => {
+      if (document.visibilityState === 'visible') fetchAllNodeStatus();
+    };
+    intervalId = setInterval(tick, 30000);
+    document.addEventListener('visibilitychange', tick);
+    return () => {
+      clearInterval(intervalId);
+      document.removeEventListener('visibilitychange', tick);
+    };
   }, [nodes]);
 
   const nodeStats = useMemo(() => {

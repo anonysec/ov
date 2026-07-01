@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse
 
 from backend.operations.daily_checks import enforce_user_limits, check_user_used_traffic
 from backend.config import config
@@ -23,8 +23,11 @@ api = FastAPI(
 
 frontend_build_path = os.path.join(os.path.dirname(__file__), "..", "frontend", "dist")
 
+# Normalize the configured URL path (strip slashes). Empty -> served at root.
+URLPATH = (config.URLPATH or "").strip("/")
+
 api.mount(
-    f"/{config.URLPATH}/assets",
+    f"/{URLPATH}/assets" if URLPATH else "/assets",
     StaticFiles(directory=os.path.join(frontend_build_path, "assets")),
     name="assets",
 )
@@ -68,8 +71,25 @@ for router in all_routers:
     api.include_router(subscription_router)
 
 
-@api.get(f"/{config.URLPATH}/{{path:path}}")
-@api.get(f"/{config.URLPATH}")
-async def serve_react():
+async def _serve_react():
     index_path = os.path.join(frontend_build_path, "index.html")
     return FileResponse(index_path)
+
+
+if URLPATH:
+    # Serve the SPA under the configured path.
+    @api.get(f"/{URLPATH}")
+    @api.get(f"/{URLPATH}/{{path:path}}")
+    async def serve_react_path():
+        return await _serve_react()
+
+    # Redirect the bare root to the panel path so users don't have to know it.
+    @api.get("/")
+    async def root_redirect():
+        return RedirectResponse(url=f"/{URLPATH}")
+else:
+    # No path configured: serve the SPA directly at the root.
+    @api.get("/")
+    @api.get("/{path:path}")
+    async def serve_react_root(path: str = ""):
+        return await _serve_react()

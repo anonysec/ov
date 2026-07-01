@@ -77,6 +77,7 @@
     "tunnelAddress": "Tunnel Address",
     "ovpnPort": "OVPN Port",
     "key": "Key",
+    "keyKeepExistingHint": "Existing key — change to overwrite",
     "setNewSetting": "Set New Setting",
     "nodeCreatedAt": "Created At",
     "noNodesFound": "No nodes found.",

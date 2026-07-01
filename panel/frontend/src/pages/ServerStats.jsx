@@ -97,9 +97,20 @@ const ServerStats = () => {
     fetchServerData();
     fetchNodes();
     fetchUsers();
-    const intervalId = setInterval(fetchServerData, 5000);
 
-    return () => clearInterval(intervalId);
+    // Poll server stats periodically, but only while the tab is visible to
+    // avoid needless CPU/network use in background tabs.
+    const POLL_MS = 15000;
+    const tick = () => {
+      if (document.visibilityState === 'visible') fetchServerData();
+    };
+    const intervalId = setInterval(tick, POLL_MS);
+    document.addEventListener('visibilitychange', tick);
+
+    return () => {
+      clearInterval(intervalId);
+      document.removeEventListener('visibilitychange', tick);
+    };
   }, []);
 
   if (!stats) {

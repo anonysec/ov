@@ -111,8 +111,9 @@ def show_menu():
         ("1", "Install", Fore.GREEN),
         ("2", "Update", Fore.CYAN),
         ("3", "Restart", Fore.BLUE),
-        ("4", "Uninstall", Fore.RED),
-        ("5", "Exit", Fore.YELLOW),
+        ("4", "Change port", Fore.MAGENTA),
+        ("5", "Uninstall", Fore.RED),
+        ("6", "Exit", Fore.YELLOW),
     ]
 
     for num, desc, color in options:
@@ -126,11 +127,11 @@ def ask_choice():
         try:
             choice = input(f"{Fore.YELLOW}Enter your choice: {Style.RESET_ALL}")
 
-            if choice in ["1", "2", "3", "4", "5"]:
+            if choice in ["1", "2", "3", "4", "5", "6"]:
                 return choice
             else:
                 print(
-                    f"\n{Fore.RED}Invalid choice. Please enter a number between 1-5{Style.RESET_ALL}"
+                    f"\n{Fore.RED}Invalid choice. Please enter a number between 1-6{Style.RESET_ALL}"
                 )
                 time.sleep(2)
                 show_menu()
@@ -339,6 +340,58 @@ def restart_panel():
         main_menu()
 
 
+def change_port():
+    """Change the panel port in .env and restart, without reinstalling."""
+    install_dir = "/opt/ov-panel"
+    env_file = os.path.join(install_dir, ".env")
+    try:
+        if not os.path.exists(env_file):
+            print(f"\n{Fore.RED}OV-Panel is not installed.{Style.RESET_ALL}")
+            input(f"{Fore.YELLOW}Press Enter to return to menu...{Style.RESET_ALL}")
+            main_menu()
+            return
+
+        # Show current port.
+        current = ""
+        with open(env_file, "r") as f:
+            for line in f:
+                if line.strip().startswith("PORT="):
+                    current = line.strip().split("=", 1)[1]
+        print(f"\n{Fore.CYAN}Current panel port: {current or 'unknown'}{Style.RESET_ALL}")
+
+        new_port = ask_user(
+            f"{Fore.GREEN}> New panel port: {Style.RESET_ALL}", input_type="port"
+        )
+
+        lines = []
+        found = False
+        with open(env_file, "r") as f:
+            for line in f:
+                if line.strip().startswith("PORT="):
+                    lines.append(f"PORT={new_port}\n")
+                    found = True
+                else:
+                    lines.append(line)
+        if not found:
+            lines.append(f"PORT={new_port}\n")
+        with open(env_file, "w") as f:
+            f.writelines(lines)
+
+        print(f"\n{Fore.YELLOW}Restarting OV-Panel on port {new_port}...{Style.RESET_ALL}")
+        subprocess.run(["systemctl", "restart", "ov-panel"], check=True)
+        print(f"\n{Fore.GREEN}Panel port changed to {new_port}.{Style.RESET_ALL}")
+        input(f"{Fore.YELLOW}Press Enter to return to menu...{Style.RESET_ALL}")
+        main_menu()
+
+    except Exception as e:
+        print(f"\n{Fore.RED}Failed to change port: {str(e)}{Style.RESET_ALL}")
+        try:
+            input(f"{Fore.YELLOW}Press Enter to return to menu...{Style.RESET_ALL}")
+        except KeyboardInterrupt:
+            sys.exit(0)
+        main_menu()
+
+
 def remove_panel():
     try:
         if not os.path.exists("/opt/ov-panel"):
@@ -477,8 +530,10 @@ def main_menu():
         elif choice == "3":
             restart_panel()
         elif choice == "4":
-            remove_panel()
+            change_port()
         elif choice == "5":
+            remove_panel()
+        elif choice == "6":
             print(f"\n{Fore.GREEN}Thank you for using OV-Panel!{Style.RESET_ALL}\n")
             sys.exit()
     except KeyboardInterrupt:
