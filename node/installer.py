@@ -280,8 +280,9 @@ def uninstall_ovnode() -> None:
         run_command(["systemctl", "daemon-reload"], check=False)
         run_command(["systemctl", "reset-failed"], check=False)
         print(Fore.GREEN + "OV-Node uninstallation completed successfully!" + Style.RESET_ALL)
-        input("Press Enter to return to the menu...")
-        menu()
+        print(Fore.YELLOW + "To install OV-Node again, run:" + Style.RESET_ALL)
+        print("bash <(curl -s https://raw.githubusercontent.com/anonysec/ov/main/node/install.sh)")
+        sys.exit(0)
     except Exception as e:
         print(Fore.RED + f"Error occurred during uninstallation: {e}" + Style.RESET_ALL)
         input("Press Enter to return to the menu...")

@@ -5,22 +5,42 @@ import LoadingButton from './LoadingButton';
 
 const SelectNodeForDownloadModal = ({ user, onClose }) => {
   const [nodes, setNodes] = useState([]);
-  const [selectedNodeAddress, setSelectedNodeAddress] = useState('');
+  const [selectedNodeId, setSelectedNodeId] = useState('');
   const [isLoadingNodes, setIsLoadingNodes] = useState(true);
   const [isDownloading, setIsDownloading] = useState(false);
   const [error, setError] = useState('');
   const { t } = useTranslation();
+
+  const nodeIsActive = (node) => node.status === true || node.status === 'active';
+
+  const decodeArrayBuffer = (data) => {
+    try {
+      return new TextDecoder('utf-8').decode(new Uint8Array(data));
+    } catch {
+      return '';
+    }
+  };
+
+  const looksLikeOpenVpnConfig = (text) => {
+    const trimmed = text.trimStart();
+    return (
+      trimmed.startsWith('client') ||
+      trimmed.includes('\nclient\n') ||
+      (trimmed.includes('<ca>') && trimmed.includes('</ca>')) ||
+      trimmed.includes('remote ')
+    );
+  };
 
   useEffect(() => {
     const fetchNodes = async () => {
       try {
         const response = await apiClient.get('/nodes/');
         if (response.data.success && response.data.data) {
-          const available = response.data.data.filter(node => node.status);
+          const available = response.data.data.filter(nodeIsActive);
           setNodes(available);
-          if (available.length > 0) setSelectedNodeAddress(available[0].address);
+          if (available.length > 0) setSelectedNodeId(String(available[0].id));
         }
-      } catch (err) {
+      } catch {
         setError('Failed to load available nodes.');
       } finally {
         setIsLoadingNodes(false);
@@ -35,35 +55,59 @@ const SelectNodeForDownloadModal = ({ user, onClose }) => {
     setIsDownloading(true);
 
     try {
-      let downloadUrl;
-      let downloadFileName;
-
-      if (!selectedNodeAddress) throw new Error('No node selected for download.');
-      const selectedNode = nodes.find(n => n.address === selectedNodeAddress);
+      if (!selectedNodeId) throw new Error('No node selected for download.');
+      const selectedNode = nodes.find(n => String(n.id) === String(selectedNodeId));
       if (!selectedNode) throw new Error('Selected node not found.');
-      downloadUrl = `/nodes/ovpn/${user.uuid}/${selectedNode.id}/`;
-      downloadFileName = `${user.name}-${selectedNode.name}.ovpn`;
 
-      const response = await apiClient.get(downloadUrl, { responseType: 'arraybuffer' });
-      const contentType = response.headers['content-type'];
+      const downloadUrl = `/nodes/ovpn/${user.uuid}/${selectedNode.id}`;
+      const downloadFileName = `${user.name}-${selectedNode.name}.ovpn`;
 
-      if (contentType && contentType.includes('application/json')) {
-        const decoder = new TextDecoder('utf-8');
-        const jsonString = decoder.decode(new Uint8Array(response.data));
-        const errorData = JSON.parse(jsonString);
-        throw new Error(errorData.msg || 'An unknown error occurred on the server.');
-      } else {
-        const blob = new Blob([response.data], { type: contentType || 'application/octet-stream' });
-        const url = window.URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.setAttribute('download', downloadFileName);
-        document.body.appendChild(link);
-        link.click();
-        link.parentNode.removeChild(link);
-        window.URL.revokeObjectURL(url);
-        onClose();
+      const response = await apiClient.get(downloadUrl, {
+        responseType: 'arraybuffer',
+        headers: { Accept: 'application/x-openvpn-profile,text/plain,*/*' },
+        validateStatus: () => true,
+      });
+
+      const contentType = (response.headers['content-type'] || '').toLowerCase();
+      const text = decodeArrayBuffer(response.data);
+      const startsWithHtml = text.trimStart().toLowerCase().startsWith('<!doctype html') || text.trimStart().toLowerCase().startsWith('<html');
+
+      if (response.status < 200 || response.status >= 300) {
+        if (contentType.includes('application/json')) {
+          try {
+            const errorData = JSON.parse(text);
+            throw new Error(errorData.detail || errorData.msg || `Download failed with HTTP ${response.status}.`);
+          } catch {
+            throw new Error(`Download failed with HTTP ${response.status}.`);
+          }
+        }
+        throw new Error(text.slice(0, 300) || `Download failed with HTTP ${response.status}.`);
       }
+
+      if (contentType.includes('application/json')) {
+        try {
+          const errorData = JSON.parse(text);
+          throw new Error(errorData.detail || errorData.msg || 'Server returned JSON instead of an OVPN profile.');
+        } catch (jsonError) {
+          if (jsonError.message) throw jsonError;
+          throw new Error('Server returned JSON instead of an OVPN profile.');
+        }
+      }
+
+      if (contentType.includes('text/html') || startsWithHtml || !looksLikeOpenVpnConfig(text)) {
+        throw new Error('Panel received HTML or invalid content instead of an OpenVPN profile. Check panel URLPATH/API build and node selection.');
+      }
+
+      const blob = new Blob([response.data], { type: 'application/x-openvpn-profile' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', downloadFileName);
+      document.body.appendChild(link);
+      link.click();
+      link.parentNode.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      onClose();
     } catch (err) {
       setError(err.message || `Failed to download config for user "${user.name}".`);
     } finally {
@@ -86,18 +130,18 @@ const SelectNodeForDownloadModal = ({ user, onClose }) => {
             {isLoadingNodes ? (
               <p>Loading nodes...</p>
             ) : nodes.length === 0 ? (
-              <p>{t('noNodesAvailable', 'No nodes available for download.')}</p>
+              <p>{t('noNodesAvailable', 'No active nodes available for download.')}</p>
             ) : (
               <select
                 id="node-select"
-                value={selectedNodeAddress}
-                onChange={(e) => setSelectedNodeAddress(e.target.value)}
-                style={{ width: '100%', padding: '10px', backgroundColor: 'var(--background-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border-color)', borderRadius: '8px' }}
+                value={selectedNodeId}
+                onChange={(e) => setSelectedNodeId(e.target.value)}
+                style={{ width: '100%', padding: '10px', backgroundColor: 'var(--background-primary)', color: 'var(--text-primary)', border: '1px solid var(--border-color)', borderRadius: '8px' }}
                 required
               >
                 {nodes.map(node => (
-                  <option key={node.address} value={node.address}>
-                    {node.name} ({node.address})
+                  <option key={node.id} value={String(node.id)}>
+                    {node.name} ({node.address}:{node.port})
                   </option>
                 ))}
               </select>

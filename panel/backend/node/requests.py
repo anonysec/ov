@@ -114,15 +114,35 @@ class NodeRequests:
     def download_ovpn_client(self, name: str) -> Response:
         api = f"{self.scheme}://{self.address}/sync/download/ovpn/{name}"
         try:
-            response = requests.get(api, headers=self.headers, timeout=25)
-            if response.status_code == 200:
+            response = requests.get(
+                api,
+                headers={**self.headers, "Accept": "application/x-openvpn-profile,text/plain,*/*"},
+                timeout=25,
+            )
+            content_type = (response.headers.get("content-type") or "").lower()
+            text_start = response.content[:512].decode("utf-8", errors="ignore").lstrip().lower()
+            looks_like_ovpn = (
+                response.content.lstrip().startswith(b"client")
+                or b"<ca>" in response.content
+                or b"remote " in response.content
+            )
+            if response.status_code == 200 and looks_like_ovpn and "text/html" not in content_type and not text_start.startswith("<html") and not text_start.startswith("<!doctype html"):
                 return Response(
                     content=response.content,
                     media_type="application/x-openvpn-profile",
                     headers={
-                        "Content-Disposition": f'attachment; filename="{name}.ovpn"'
+                        "Content-Disposition": f'attachment; filename="{name}.ovpn"',
+                        "X-Content-Type-Options": "nosniff",
                     },
                 )
+            logger.error(
+                "Node %s returned invalid OVPN response for %s: status=%s content-type=%s start=%r",
+                self.address,
+                name,
+                response.status_code,
+                content_type,
+                text_start[:120],
+            )
         except Exception as e:
             logger.error(f"Error downloading OVPN client from node {self.address}: {e}")
         return None
