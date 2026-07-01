@@ -1,4 +1,5 @@
 import os
+import re
 import requests
 import sys
 import subprocess
@@ -113,9 +114,8 @@ def show_menu():
         ("1", "Install", Fore.GREEN),
         ("2", "Update", Fore.CYAN),
         ("3", "Restart", Fore.BLUE),
-        ("4", "Change Config (port / path / user / pass)", Fore.MAGENTA),
-        ("5", "Uninstall", Fore.RED),
-        ("6", "Exit", Fore.YELLOW),
+        ("4", "Uninstall", Fore.RED),
+        ("5", "Exit", Fore.YELLOW),
     ]
 
     for num, desc, color in options:
@@ -129,11 +129,11 @@ def ask_choice():
         try:
             choice = input(f"{Fore.YELLOW}Enter your choice: {Style.RESET_ALL}")
 
-            if choice in ["1", "2", "3", "4", "5", "6"]:
+            if choice in ["1", "2", "3", "4", "5"]:
                 return choice
             else:
                 print(
-                    f"\n{Fore.RED}Invalid choice. Please enter a number between 1-6{Style.RESET_ALL}"
+                    f"\n{Fore.RED}Invalid choice. Please enter a number between 1-5{Style.RESET_ALL}"
                 )
                 time.sleep(2)
                 show_menu()
@@ -183,20 +183,18 @@ def setup_panel():
             "JWT_SECRET_KEY": create_secret_key(),
         }
 
-        # Robust replace (handles spaces around =, quotes, comments on line)
+        # Very robust .env replacement (handles spaces, quotes, comments, case)
         lines = []
         with open(".env", "r") as f:
             for line in f:
-                stripped = line.strip()
-                replaced = False
-                if stripped and not stripped.startswith("#") and "=" in stripped:
-                    key = stripped.split("=", 1)[0].strip()
+                match = re.match(r'^\s*([A-Z_]+)\s*=\s*(.*)$', line)
+                if match:
+                    key = match.group(1)
                     if key in replacements:
                         val = replacements[key]
                         lines.append(f"{key}={val}\n")
-                        replaced = True
-                if not replaced:
-                    lines.append(line)
+                        continue
+                lines.append(line)
 
         with open(".env", "w") as f:
             f.writelines(lines)
@@ -349,90 +347,8 @@ def restart_panel():
         main_menu()
 
 
-def change_config():
-    """Change panel config: port, path, username, password (and restart)."""
-    install_dir = "/opt/ov-panel"
-    env_file = os.path.join(install_dir, ".env")
-    try:
-        if not os.path.exists(env_file):
-            print(f"\n{Fore.RED}OV-Panel is not installed.{Style.RESET_ALL}")
-            input(f"{Fore.YELLOW}Press Enter to return to menu...{Style.RESET_ALL}")
-            main_menu()
-            return
-
-        # Read current values
-        current = {}
-        with open(env_file, "r") as f:
-            for line in f:
-                if "=" in line:
-                    k, v = line.strip().split("=", 1)
-                    current[k] = v
-
-        print(f"\n{Fore.CYAN}Current Panel Config:{Style.RESET_ALL}")
-        print(f"  Username : {current.get('ADMIN_USERNAME', 'unknown')}")
-        print(f"  Port     : {current.get('PORT', '9000')}")
-        print(f"  Path     : {current.get('URLPATH', '(root)') or '(root)'}")
-
-        print(f"\n{Fore.YELLOW}Leave blank to keep current value.{Style.RESET_ALL}\n")
-
-        # Ask for new values (optional)
-        new_user = ask_user(f"{Fore.GREEN}> New username (leave blank to keep): {Style.RESET_ALL}", allow_empty=True) or current.get("ADMIN_USERNAME")
-        new_pass = None
-        change_pass = input(f"{Fore.GREEN}> Change password? (y/N): {Style.RESET_ALL}").strip().lower() == "y"
-        if change_pass:
-            new_pass = ask_password(f"{Fore.RED}> New panel password: {Style.RESET_ALL}")
-
-        new_port = ask_user(f"{Fore.GREEN}> New port (leave blank to keep): {Style.RESET_ALL}", allow_empty=True, input_type="port") or current.get("PORT")
-        new_path = ask_user(f"{Fore.GREEN}> New URL path (leave blank = root): {Style.RESET_ALL}", allow_empty=True) or current.get("URLPATH", "")
-
-        replacements = {
-            "ADMIN_USERNAME": new_user,
-            "PORT": new_port,
-            "URLPATH": new_path,
-            "VITE_URLPATH": new_path,
-        }
-        if new_pass:
-            replacements["ADMIN_PASSWORD"] = new_pass
-
-        # robust replace
-        lines = []
-        with open(env_file, "r") as f:
-            for line in f:
-                stripped = line.strip()
-                replaced = False
-                if stripped and not stripped.startswith("#") and "=" in stripped:
-                    key = stripped.split("=", 1)[0].strip()
-                    if key in replacements:
-                        val = replacements[key]
-                        lines.append(f"{key}={val}\n")
-                        replaced = True
-                if not replaced:
-                    lines.append(line)
-
-        with open(env_file, "w") as f:
-            f.writelines(lines)
-
-        print(f"\n{Fore.YELLOW}Restarting OV-Panel...{Style.RESET_ALL}")
-        subprocess.run(["systemctl", "restart", "ov-panel"], check=True)
-        print(f"\n{Fore.GREEN}Panel config updated successfully!{Style.RESET_ALL}")
-
-        server_ip = get_server_ip()
-        url = f"http://{server_ip}:{new_port}/{new_path}" if new_path else f"http://{server_ip}:{new_port}/"
-        print(f"{Fore.CYAN}New URL: {url}{Style.RESET_ALL}")
-
-        input(f"{Fore.YELLOW}Press Enter to return to menu...{Style.RESET_ALL}")
-        main_menu()
-
-    except Exception as e:
-        print(f"\n{Fore.RED}Failed to change config: {str(e)}{Style.RESET_ALL}")
-        try:
-            input(f"{Fore.YELLOW}Press Enter to return to menu...{Style.RESET_ALL}")
-        except KeyboardInterrupt:
-            sys.exit(0)
-        main_menu()
-
-
 def remove_panel():
+    """Completely remove OV-Panel: service + install dir + data."""
     try:
         if not os.path.exists("/opt/ov-panel"):
             subprocess.run("clear")
@@ -452,7 +368,7 @@ def remove_panel():
             return
 
         subprocess.run("clear")
-        print(f"\n{Fore.RED}Warning: This will remove all panel data!{Style.RESET_ALL}")
+        print(f"\n{Fore.RED}Warning: This will PERMANENTLY remove OV-Panel, all data, and configs!{Style.RESET_ALL}")
 
         if not ask_confirmation("Do you want to proceed? (y/n): "):
             print(f"\n{Fore.YELLOW}Uninstallation cancelled.{Style.RESET_ALL}")
@@ -462,9 +378,35 @@ def remove_panel():
 
         subprocess.run("clear")
         print(f"\n{Fore.YELLOW}Processing removal...{Style.RESET_ALL}\n")
+
+        # 1. Stop and remove systemd service
         stop_service()
 
-        print(f"\n{Fore.GREEN}Uninstallation Complete!{Style.RESET_ALL}\n")
+        # 2. Remove the entire install directory (including data, frontend build, .env)
+        install_dir = "/opt/ov-panel"
+        if os.path.exists(install_dir):
+            print(f"Removing {install_dir}...")
+            try:
+                shutil.rmtree(install_dir)
+            except Exception as e:
+                print(f"Warning: Could not fully remove {install_dir}: {e}")
+
+        # 3. Clean any leftover service file
+        service_file = "/etc/systemd/system/ov-panel.service"
+        if os.path.exists(service_file):
+            try:
+                os.remove(service_file)
+            except Exception:
+                pass
+
+        # 4. Reload systemd
+        try:
+            subprocess.run(["sudo", "systemctl", "daemon-reload"], check=False)
+            subprocess.run(["sudo", "systemctl", "reset-failed"], check=False)
+        except Exception:
+            pass
+
+        print(f"\n{Fore.GREEN}Uninstallation Complete! All panel files removed.{Style.RESET_ALL}\n")
 
         try:
             input(f"{Fore.YELLOW}Press Enter to return to menu...{Style.RESET_ALL}")
@@ -570,10 +512,8 @@ def main_menu():
         elif choice == "3":
             restart_panel()
         elif choice == "4":
-            change_config()
-        elif choice == "5":
             remove_panel()
-        elif choice == "6":
+        elif choice == "5":
             print(f"\n{Fore.GREEN}Thank you for using OV-Panel!{Style.RESET_ALL}\n")
             sys.exit()
     except KeyboardInterrupt:

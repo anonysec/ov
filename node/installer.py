@@ -270,37 +270,76 @@ def restart_ovnode():
 
 
 def uninstall_ovnode():
-    if not os.path.exists("/opt/ov-node"):
-        print("OV-Node is not installed.")
-        input("Press Enter to return to the menu...")
-        menu()
+    """Completely remove OV-Node: OpenVPN + /opt/ov-node + all data + service."""
     try:
+        if not os.path.exists("/opt/ov-node") and not os.path.exists("/etc/openvpn"):
+            print("OV-Node is not installed.")
+            input("Press Enter to return to the menu...")
+            menu()
+            return
+
         uninstall = input("Do you want to uninstall OV-Node? (y/n): ")
         if uninstall.lower() != "y":
             print("Uninstallation canceled.")
             menu()
+            return
 
-        bash = pexpect.spawn("bash /root/openvpn-install.sh", timeout=300)
-        subprocess.run("clear")
-        print("Please wait...")
+        print("Removing OpenVPN (this may take a moment)...")
+        if os.path.exists("/root/openvpn-install.sh"):
+            try:
+                bash = pexpect.spawn("bash /root/openvpn-install.sh", timeout=300)
+                subprocess.run("clear")
+                print("Please wait...")
 
-        bash.expect("Option:")
-        bash.sendline("3")
+                bash.expect("Option:")
+                bash.sendline("3")
 
-        bash.expect("Confirm OpenVPN removal")
-        bash.sendline("y")
+                bash.expect("Confirm OpenVPN removal")
+                bash.sendline("y")
 
-        bash.expect(pexpect.EOF, timeout=60)
-        bash.close()
+                bash.expect(pexpect.EOF, timeout=60)
+                bash.close()
+            except Exception:
+                pass
 
-        pexpect.run("rm -rf /etc/openvpn")
+        # Remove openvpn configs
+        if os.path.exists("/etc/openvpn"):
+            try:
+                subprocess.run(["rm", "-rf", "/etc/openvpn"], check=False)
+            except Exception:
+                pass
+
+        # Fully remove the node install dir + data + .env
+        install_dir = "/opt/ov-node"
+        if os.path.exists(install_dir):
+            print(f"Removing {install_dir} (all data)...")
+            try:
+                shutil.rmtree(install_dir)
+            except Exception as e:
+                print(f"Warning: {e}")
+
+        # Remove service
+        deactivate_ovnode()
+
+        # Clean any leftover service file
+        service_file = "/etc/systemd/system/ov-node.service"
+        if os.path.exists(service_file):
+            try:
+                os.remove(service_file)
+            except Exception:
+                pass
+
+        try:
+            subprocess.run(["sudo", "systemctl", "daemon-reload"], check=False)
+            subprocess.run(["sudo", "systemctl", "reset-failed"], check=False)
+        except Exception:
+            pass
 
         print(
             Fore.GREEN
-            + "OV-Node uninstallation completed successfully!"
+            + "OV-Node uninstallation completed successfully! Everything removed."
             + Style.RESET_ALL
         )
-        deactivate_ovnode()
         input("Press Enter to return to the menu...")
         menu()
 
@@ -353,88 +392,6 @@ def deactivate_ovnode() -> None:
     subprocess.run(["rm", "-f", "/etc/systemd/system/ov-node.service"])
 
 
-def _update_env_file(env_path, replacements):
-    """Robust .env updater: matches keys ignoring spaces around = and comments."""
-    if not os.path.exists(env_path):
-        return
-    lines = []
-    with open(env_path, "r") as f:
-        for line in f:
-            stripped = line.strip()
-            replaced = False
-            if stripped and not stripped.startswith("#") and "=" in stripped:
-                key = stripped.split("=", 1)[0].strip()
-                if key in replacements:
-                    val = replacements[key]
-                    lines.append(f"{key}={val}\n")
-                    replaced = True
-            if not replaced:
-                lines.append(line)
-    with open(env_path, "w") as f:
-        f.writelines(lines)
-
-
-def change_node_config():
-    """Change OV-Node port and/or API key without reinstalling."""
-    env_file = "/opt/ov-node/.env"
-    try:
-        if not os.path.exists(env_file):
-            print("OV-Node is not installed.")
-            input("Press Enter to return to the menu...")
-            menu()
-            return
-
-        current_port = ""
-        current_key = ""
-        with open(env_file, "r") as f:
-            for line in f:
-                stripped = line.strip()
-                if stripped and not stripped.startswith("#") and "=" in stripped:
-                    key = stripped.split("=", 1)[0].strip()
-                    val = stripped.split("=", 1)[1].strip()
-                    if key == "SERVICE_PORT":
-                        current_port = val
-                    elif key == "API_KEY":
-                        current_key = val
-
-        print(Fore.CYAN + f"\nCurrent Node Config:" + Style.RESET_ALL)
-        print(f"  Port   : {current_port or '2083'}")
-        print(f"  API Key: {current_key[:12] + '...' if current_key else 'not set'}")
-
-        print(Fore.YELLOW + "\nLeave blank to keep current value." + Style.RESET_ALL)
-
-        new_port = input("New node service port (leave blank to keep): ").strip()
-        if new_port == "":
-            new_port = current_port or "2083"
-        if not new_port.isdigit() or not (1 <= int(new_port) <= 65535):
-            print(Fore.RED + "Invalid port." + Style.RESET_ALL)
-            input("Press Enter to return to the menu...")
-            menu()
-            return
-
-        new_key = input("New API key (leave blank to keep): ").strip()
-        if new_key == "":
-            new_key = current_key
-
-        replacements = {
-            "SERVICE_PORT": new_port,
-            "API_KEY": new_key,
-        }
-        _update_env_file(env_file, replacements)
-
-        subprocess.run(["systemctl", "restart", "ov-node"], check=True)
-        print(Fore.GREEN + f"\nNode config updated!" + Style.RESET_ALL)
-        print(f"  Port: {new_port}")
-        if new_key != current_key:
-            print(f"  New API Key: {new_key}")
-        print(Fore.YELLOW + "Remember to update the node in the panel if you changed the port or key." + Style.RESET_ALL)
-        input("Press Enter to return to the menu...")
-        menu()
-
-    except Exception as e:
-        print(Fore.RED + f"Failed to change node config: {e}" + Style.RESET_ALL)
-        input("Press Enter to return to the menu...")
-        menu()
 
 
 def menu():
@@ -447,9 +404,8 @@ def menu():
     print("  1. Install")
     print("  2. Update")
     print("  3. Restart")
-    print("  4. Change Config (port / api key)")
-    print("  5. Uninstall")
-    print("  6. Exit")
+    print("  4. Uninstall")
+    print("  5. Exit")
     print()
     choice = input(Fore.YELLOW + "Enter your choice: " + Style.RESET_ALL)
 
@@ -460,10 +416,8 @@ def menu():
     elif choice == "3":
         restart_ovnode()
     elif choice == "4":
-        change_node_config()
-    elif choice == "5":
         uninstall_ovnode()
-    elif choice == "6":
+    elif choice == "5":
         print(Fore.GREEN + "\nExiting..." + Style.RESET_ALL)
         sys.exit()
     else:
