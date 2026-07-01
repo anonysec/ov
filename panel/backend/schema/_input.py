@@ -28,8 +28,8 @@ class NodeCreate(BaseModel):
     tunnel_address: str = Field(default=None)
     protocol: str = Field(default="tcp")
     ovpn_port: int = Field(default=1194)
-    port: int
-    key: str = Field(min_length=10, max_length=40)
+    port: int = 2083
+    key: Optional[str] = Field(default=None, min_length=10, max_length=40)
     status: bool = Field(default=True)
     set_new_setting: bool = Field(default=False)
 

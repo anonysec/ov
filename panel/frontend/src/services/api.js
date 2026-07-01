@@ -1,9 +1,12 @@
 import axios from 'axios';
 
 
-const apiClient = axios.create({
+// Respect VITE_URLPATH for baseURL when panel is installed under a subpath
+const basePath = (import.meta.env.VITE_URLPATH || '').trim();
+const apiBase = basePath ? `/${basePath}/api` : '/api';
 
-  baseURL: '/api'
+const apiClient = axios.create({
+  baseURL: apiBase
 });
 
 // Custom event fired when the backend rejects our token (expired/invalid).

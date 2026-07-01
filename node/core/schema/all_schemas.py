@@ -6,8 +6,8 @@ class User(BaseModel):
     name: str
     status: str = "activate"
     # Max simultaneous logins/devices for this config.
-    # 1 = single login (default), 0 = unlimited. None = leave unchanged.
-    max_logins: Optional[int] = None
+    # 1 = single login (default), 0 = unlimited.
+    max_logins: int = 1
 
 
 class UserLimit(BaseModel):

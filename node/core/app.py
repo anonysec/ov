@@ -11,5 +11,8 @@ api.include_router(core_router)
 
 @api.on_event("startup")
 async def _setup_multilogin() -> None:
-    """Ensure the per-config connection-limit enforcement is in place."""
+    """Ensure the per-config connection-limit enforcement is in place.
+    This is critical for multi-login to actually work after restarts or node edits.
+    """
+    from core.service.multilogin import ensure_multilogin_setup
     ensure_multilogin_setup()

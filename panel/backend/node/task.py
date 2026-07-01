@@ -32,22 +32,37 @@ async def add_node_handler(request: NodeCreate, db: Session) -> bool:
 
 
 async def update_node_handler(node_id: int, request: NodeCreate, db: Session) -> bool:
-    """Update a node"""
+    """Update a node + force full config + multi-login sync"""
     crud.update_node(db, node_id, request)
-    restart_node = await run_in_threadpool(
-        NodeRequests(
-            address=request.address,
-            port=request.port,
-            api_key=request.key,
-            tunnel_address=request.tunnel_address,
-            protocol=request.protocol,
-            ovpn_port=request.ovpn_port,
-            set_new_setting=True,
-        ).check_node
+
+    node_req = NodeRequests(
+        address=request.address,
+        port=request.port,
+        api_key=request.key,
+        tunnel_address=request.tunnel_address,
+        protocol=request.protocol,
+        ovpn_port=request.ovpn_port,
+        set_new_setting=True,
     )
 
-    logger.info(f"Node updated successfully: {request.address}:{request.port}")
-    return restart_node
+    # 1. Apply new server settings + multi-login scripts
+    await run_in_threadpool(node_req.check_node)
+
+    # 2. Push every user's max_logins + re-create users on the node.
+    # This is critical so multi-login works after port/protocol change.
+    try:
+        from backend.db import crud as db_crud
+        users = db_crud.get_all_users(db)
+        for u in users:
+            max_l = getattr(u, 'max_logins', 1) or 1
+            cn = f"{u.name}-{request.name}"
+            await run_in_threadpool(node_req.set_user_limit, cn, max_l)
+            await run_in_threadpool(node_req.create_user, cn, max_l)
+    except Exception as e:
+        logger.warning(f"Could not push max_logins after node edit: {e}")
+
+    logger.info(f"Node updated + multi-login limits pushed: {request.address}:{request.port}")
+    return True
 
 
 async def delete_node_handler(node_id: int, db: Session) -> bool:

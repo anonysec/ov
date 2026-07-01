@@ -20,7 +20,7 @@ async def get_all_admins(
 
     admin_list = []
     for admin in result:
-        admin_data = Admins.from_orm(admin)
+        admin_data = Admins.model_validate(admin)
         admin_data.users_count = sum(1 for u in users if u.owner == admin.username)
         admin_list.append(admin_data)
 
@@ -52,7 +52,7 @@ async def create_admin(
     return ResponseModel(
         success=True,
         msg="Admin created successfully",
-        data=Admins.from_orm(new_admin),
+        data=Admins.model_validate(new_admin),
     )
 
 
@@ -75,7 +75,7 @@ async def update_admin(
     return ResponseModel(
         success=True,
         msg="Admin updated successfully",
-        data=Admins.from_orm(updated_admin),
+        data=Admins.model_validate(updated_admin),
     )
 
 

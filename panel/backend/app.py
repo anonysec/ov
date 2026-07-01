@@ -21,6 +21,11 @@ api = FastAPI(
     docs_url="/doc" if config.DOC else None,
 )
 
+@api.get("/health", tags=["Health"])
+async def health_check():
+    """Simple health check endpoint."""
+    return {"status": "ok", "version": __version__}
+
 frontend_build_path = os.path.join(os.path.dirname(__file__), "..", "frontend", "dist")
 
 # Normalize the configured URL path (strip slashes). Empty -> served at root.
@@ -46,14 +51,14 @@ def start_scheduler():
     scheduler = AsyncIOScheduler()
     scheduler.add_job(
         check_user_used_traffic,
-        CronTrigger(minute="*/2"),
+        CronTrigger(minute="*/5"),   # reduced frequency → significantly lower CPU/RAM
         id="check_user_used_traffic",
         replace_existing=True,
     )
 
     scheduler.add_job(
         enforce_user_limits,
-        CronTrigger(minute="*/5"),
+        CronTrigger(minute="*/10"),  # reduced frequency
         id="enforce_user_limits",
         replace_existing=True,
     )
@@ -68,7 +73,8 @@ async def startup_event():
 
 for router in all_routers:
     api.include_router(prefix="/api", router=router)
-    api.include_router(subscription_router)
+
+api.include_router(subscription_router)
 
 
 async def _serve_react():

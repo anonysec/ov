@@ -25,7 +25,7 @@ def get_server_ip():
         )
         ip_addresses = result.stdout.strip().split()
         return ip_addresses[0] if ip_addresses else "your-server-ip"
-    except:
+    except Exception:
         return "your-server-ip"
 
 
@@ -111,7 +111,7 @@ def show_menu():
         ("1", "Install", Fore.GREEN),
         ("2", "Update", Fore.CYAN),
         ("3", "Restart", Fore.BLUE),
-        ("4", "Change port", Fore.MAGENTA),
+        ("4", "Change Config (port / path / user / pass)", Fore.MAGENTA),
         ("5", "Uninstall", Fore.RED),
         ("6", "Exit", Fore.YELLOW),
     ]
@@ -340,8 +340,8 @@ def restart_panel():
         main_menu()
 
 
-def change_port():
-    """Change the panel port in .env and restart, without reinstalling."""
+def change_config():
+    """Change panel config: port, path, username, password (and restart)."""
     install_dir = "/opt/ov-panel"
     env_file = os.path.join(install_dir, ".env")
     try:
@@ -351,40 +351,68 @@ def change_port():
             main_menu()
             return
 
-        # Show current port.
-        current = ""
+        # Read current values
+        current = {}
         with open(env_file, "r") as f:
             for line in f:
-                if line.strip().startswith("PORT="):
-                    current = line.strip().split("=", 1)[1]
-        print(f"\n{Fore.CYAN}Current panel port: {current or 'unknown'}{Style.RESET_ALL}")
+                if "=" in line:
+                    k, v = line.strip().split("=", 1)
+                    current[k] = v
 
-        new_port = ask_user(
-            f"{Fore.GREEN}> New panel port: {Style.RESET_ALL}", input_type="port"
-        )
+        print(f"\n{Fore.CYAN}Current Panel Config:{Style.RESET_ALL}")
+        print(f"  Username : {current.get('ADMIN_USERNAME', 'unknown')}")
+        print(f"  Port     : {current.get('PORT', '9000')}")
+        print(f"  Path     : {current.get('URLPATH', '(root)') or '(root)'}")
+
+        print(f"\n{Fore.YELLOW}Leave blank to keep current value.{Style.RESET_ALL}\n")
+
+        # Ask for new values (optional)
+        new_user = ask_user(f"{Fore.GREEN}> New username (leave blank to keep): {Style.RESET_ALL}", allow_empty=True) or current.get("ADMIN_USERNAME")
+        new_pass = None
+        change_pass = input(f"{Fore.GREEN}> Change password? (y/N): {Style.RESET_ALL}").strip().lower() == "y"
+        if change_pass:
+            new_pass = ask_password(f"{Fore.RED}> New panel password: {Style.RESET_ALL}")
+
+        new_port = ask_user(f"{Fore.GREEN}> New port (leave blank to keep): {Style.RESET_ALL}", allow_empty=True, input_type="port") or current.get("PORT")
+        new_path = ask_user(f"{Fore.GREEN}> New URL path (leave blank = root): {Style.RESET_ALL}", allow_empty=True) or current.get("URLPATH", "")
+
+        replacements = {
+            "ADMIN_USERNAME": new_user,
+            "PORT": new_port,
+            "URLPATH": new_path,
+            "VITE_URLPATH": new_path,
+        }
+        if new_pass:
+            replacements["ADMIN_PASSWORD"] = new_pass
 
         lines = []
-        found = False
         with open(env_file, "r") as f:
             for line in f:
-                if line.strip().startswith("PORT="):
-                    lines.append(f"PORT={new_port}\n")
-                    found = True
-                else:
+                replaced = False
+                for key, value in replacements.items():
+                    if line.strip().startswith(f"{key}="):
+                        lines.append(f"{key}={value}\n")
+                        replaced = True
+                        break
+                if not replaced:
                     lines.append(line)
-        if not found:
-            lines.append(f"PORT={new_port}\n")
+
         with open(env_file, "w") as f:
             f.writelines(lines)
 
-        print(f"\n{Fore.YELLOW}Restarting OV-Panel on port {new_port}...{Style.RESET_ALL}")
+        print(f"\n{Fore.YELLOW}Restarting OV-Panel...{Style.RESET_ALL}")
         subprocess.run(["systemctl", "restart", "ov-panel"], check=True)
-        print(f"\n{Fore.GREEN}Panel port changed to {new_port}.{Style.RESET_ALL}")
+        print(f"\n{Fore.GREEN}Panel config updated successfully!{Style.RESET_ALL}")
+
+        server_ip = get_server_ip()
+        url = f"http://{server_ip}:{new_port}/{new_path}" if new_path else f"http://{server_ip}:{new_port}/"
+        print(f"{Fore.CYAN}New URL: {url}{Style.RESET_ALL}")
+
         input(f"{Fore.YELLOW}Press Enter to return to menu...{Style.RESET_ALL}")
         main_menu()
 
     except Exception as e:
-        print(f"\n{Fore.RED}Failed to change port: {str(e)}{Style.RESET_ALL}")
+        print(f"\n{Fore.RED}Failed to change config: {str(e)}{Style.RESET_ALL}")
         try:
             input(f"{Fore.YELLOW}Press Enter to return to menu...{Style.RESET_ALL}")
         except KeyboardInterrupt:
@@ -530,7 +558,7 @@ def main_menu():
         elif choice == "3":
             restart_panel()
         elif choice == "4":
-            change_port()
+            change_config()
         elif choice == "5":
             remove_panel()
         elif choice == "6":

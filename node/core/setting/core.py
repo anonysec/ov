@@ -74,7 +74,26 @@ def change_config(request: SetSettingsModel) -> bool:
         if changed:
             _invalidate_cached_ovpn()
 
+            # CRITICAL: Delete ALL cached .ovpn files so clients get fresh configs
+            # with the new port/protocol on next download.
+            try:
+                for f in glob.glob("/root/*.ovpn"):
+                    try:
+                        os.remove(f)
+                    except:
+                        pass
+            except Exception:
+                pass
+
         restart_openvpn()
+
+        # CRITICAL for multi-login: re-apply scripts and server.conf directives
+        try:
+            from core.service.multilogin import ensure_multilogin_setup
+            ensure_multilogin_setup()
+        except Exception as e:
+            logger.error(f"Failed to re-apply multi-login after config change: {e}")
+
         logger.info(
             f"OpenVPN port changed to {request.ovpn_port}, protocol to {proto}, and tunnel address to {request.tunnel_address}"
         )

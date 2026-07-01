@@ -28,7 +28,7 @@ const EditNodeModal = ({ node, onClose, onNodeUpdated }) => {
         tunnel_address: node.tunnel_address || '',
         protocol: node.protocol || 'tcp',
         ovpn_port: node.ovpn_port || 1194,
-        port: node.port || 0,
+        port: node.port || 2083,
         key: node.key || '',
         status: node.status === 'active' || node.status === true,
         set_new_setting: true,
@@ -56,6 +56,11 @@ const EditNodeModal = ({ node, onClose, onNodeUpdated }) => {
       port: Number(formData.port),
       status: Boolean(formData.status),
     };
+
+    // Do not send empty key on edit — keep existing on backend
+    if (!payload.key || payload.key.trim() === '') {
+      delete payload.key;
+    }
 
     try {
       const response = await apiClient.put(`/nodes/${node.id}`, payload);
@@ -136,8 +141,7 @@ const EditNodeModal = ({ node, onClose, onNodeUpdated }) => {
               name="key"
               value={formData.key}
               onChange={handleChange}
-              placeholder={t('keyKeepExistingHint', 'Existing key — change to overwrite')}
-              required
+              placeholder={t('keyKeepExistingHint', 'Leave blank to keep existing key')}
             />
           </div>
           <div className="input-group" style={{ flexDirection: 'row', alignItems: 'center', gap: '8px' }}>

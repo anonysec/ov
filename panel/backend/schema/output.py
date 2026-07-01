@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from datetime import date
 from typing import Any, Optional
 
@@ -18,9 +18,7 @@ class Users(BaseModel):
     expiry_date: date
     owner: str
     uuid: str
-
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ServerInfo(BaseModel):

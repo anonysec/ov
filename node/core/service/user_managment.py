@@ -176,31 +176,51 @@ def delete_user_on_server(name) -> bool | str:
 
 
 def change_user_status(name: str, status: str) -> bool:
+    """
+    Soft enable/disable for a user.
+
+    We only touch the CCD file.
+    We deliberately do NOT restart OpenVPN here.
+
+    Why?
+    - Restarting would disconnect ALL users on the node (bad UX).
+    - Removing the CCD file is enough to block NEW connections for this user.
+    - Existing sessions will continue until they naturally disconnect or the
+      connection limit / traffic enforcement kicks in via client-connect script.
+    - This makes editing data limit / expiry date non-disruptive for other users.
+    """
     ccd_file = f"/etc/openvpn/ccd/{name}"
+
     if status == "deactivate":
         if os.path.exists(ccd_file):
             try:
                 os.remove(ccd_file)
-                restart_openvpn_service()
-                logger.info("Removed %s", ccd_file)
+                logger.info("Soft-disabled user (removed CCD): %s", name)
             except Exception as e:
-                logger.error("Error deleting file %s: %s", ccd_file, e)
+                logger.error("Error removing CCD for %s: %s", name, e)
                 return False
         return True
+
     elif status == "activate":
         try:
             os.makedirs("/etc/openvpn/ccd", exist_ok=True)
             with open(ccd_file, "w") as f:
                 f.write("")
-            logger.info("Created %s", ccd_file)
-            restart_openvpn_service()
+            logger.info("Soft-enabled user (created CCD): %s", name)
             return True
         except Exception as e:
-            logger.error("Error creating file %s: %s", ccd_file, e)
+            logger.error("Error creating CCD for %s: %s", name, e)
             return False
+
+    return False
 
 
 def restart_openvpn_service() -> bool:
+    """
+    Full OpenVPN restart.
+    Only used for server-level changes (port/protocol, multi-login script setup).
+    User enable/disable no longer calls this (soft CCD toggle only).
+    """
     try:
         os.system("systemctl restart openvpn-server@server")
         logger.info("OpenVPN service restarted successfully.")
@@ -224,8 +244,15 @@ def get_users_usage() -> UsersUsage | None:
     users = {}
     sessions: dict = {}
     file_path = "/var/log/openvpn-status.log"
-    with open(file_path) as f:
-        lines = f.readlines()
+    if not os.path.exists(file_path):
+        logger.warning("OpenVPN status log not found: %s", file_path)
+        return None
+    try:
+        with open(file_path) as f:
+            lines = f.readlines()
+    except Exception as e:
+        logger.error("Failed to read OpenVPN status log: %s", e)
+        return None
 
     for line in lines:
         line = line.strip()

@@ -22,10 +22,12 @@ class NodeRequests:
         self.protocol = protocol
         self.ovpn_port = ovpn_port
         self.set_new_setting = set_new_setting
+        # TODO: support https per-node (add field to Node model + UI)
+        self.scheme = "http"
 
     def check_node(self) -> bool:
-        """Checks the node status and sets new settings if necesary."""
-        api = f"http://{self.address}/sync/status"
+        """Checks the node status and sets new settings if necessary."""
+        api = f"{self.scheme}://{self.address}/sync/status"
         try:
             data = {
                 "tunnel_address": self.tunnel_address,
@@ -33,20 +35,22 @@ class NodeRequests:
                 "ovpn_port": self.ovpn_port,
                 "set_new_setting": self.set_new_setting,
             }
-            response = requests.get(
-                api, headers=self.headers, json=data, timeout=5
-            ).json()
+            resp = requests.get(api, headers=self.headers, json=data, timeout=5)
+            if resp.status_code != 200:
+                logger.error(f"Node {self.address} returned {resp.status_code}")
+                return False
+            response = resp.json()
             if response.get("success"):
                 return True
             else:
-                logger.error(f"Node {self.address} is not reachable")
+                logger.error(f"Node {self.address} is not reachable: {response.get('msg')}")
                 return False
         except Exception as e:
             logger.error(f"Error checking node {self.address}: {e}")
             return False
 
     def get_node_info(self) -> dict:
-        api = f"http://{self.address}/sync/status"
+        api = f"{self.scheme}://{self.address}/sync/status"
         try:
             data = {
                 "tunnel_address": self.tunnel_address,
@@ -69,7 +73,7 @@ class NodeRequests:
             return {}
 
     def create_user(self, name: str, max_logins: int = 1) -> bool:
-        api = f"http://{self.address}/sync/user"
+        api = f"{self.scheme}://{self.address}/sync/user"
         data = {"name": name, "max_logins": max_logins}
         try:
             response = requests.post(
@@ -87,7 +91,7 @@ class NodeRequests:
             return False
 
     def change_user_status(self, name, status, max_logins: int | None = None):
-        api = f"http://{self.address}/sync/user"
+        api = f"{self.scheme}://{self.address}/sync/user"
         try:
             data = {"name": name, "status": "activate" if status else "deactivate"}
             if max_logins is not None:
@@ -108,7 +112,7 @@ class NodeRequests:
             return False
 
     def download_ovpn_client(self, name: str) -> Response:
-        api = f"http://{self.address}/sync/download/ovpn/{name}"
+        api = f"{self.scheme}://{self.address}/sync/download/ovpn/{name}"
         try:
             response = requests.get(api, headers=self.headers, timeout=25)
             if response.status_code == 200:
@@ -116,7 +120,7 @@ class NodeRequests:
                     content=response.content,
                     media_type="application/x-openvpn-profile",
                     headers={
-                        "Content-Disposition": f"attachment; filename={name}.ovpn"
+                        "Content-Disposition": f'attachment; filename="{name}.ovpn"'
                     },
                 )
         except Exception as e:
@@ -124,7 +128,7 @@ class NodeRequests:
         return None
 
     def delete_user(self, name: str) -> bool:
-        api = f"http://{self.address}/sync/user/{name}"
+        api = f"{self.scheme}://{self.address}/sync/user/{name}"
         try:
             response = requests.delete(
                 api, headers=self.headers, timeout=25
@@ -145,7 +149,7 @@ class NodeRequests:
 
         max_logins: 1 = single login, 0 = unlimited.
         """
-        api = f"http://{self.address}/sync/user/limit"
+        api = f"{self.scheme}://{self.address}/sync/user/limit"
         data = {"name": name, "max_logins": max_logins}
         try:
             response = requests.put(
@@ -163,7 +167,7 @@ class NodeRequests:
             return False
 
     def get_users_usage(self) ->dict | bool:
-        api = f"http://{self.address}/sync/usage"
+        api = f"{self.scheme}://{self.address}/sync/usage"
         try:
             response = requests.get(api, headers=self.headers, timeout=25).json()
             if response.get("success"):

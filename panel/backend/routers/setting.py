@@ -42,5 +42,5 @@ async def get_server_information(user: dict = Depends(get_current_user)):
     return ResponseModel(
         success=True,
         msg="Server information retrieved successfully",
-        data=ServerInfo.from_orm(result),
+        data=ServerInfo.model_validate(result),
     )

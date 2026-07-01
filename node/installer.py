@@ -93,9 +93,17 @@ def create_ccd() -> None:
     # Set up multi-login enforcement (idempotent) on install.
     setup_multilogin()
 
-    subprocess.run(
-        ["systemctl", "restart", "openvpn-server@server.service"], check=True
-    )
+    # Auto restart after installing multi-login scripts + server.conf hooks.
+    # This is REQUIRED so the client-connect script becomes active immediately.
+    print("Restarting OpenVPN to activate multi-login enforcement...")
+    try:
+        subprocess.run(
+            ["systemctl", "restart", "openvpn-server@server.service"], check=True
+        )
+        print("✓ OpenVPN restarted with multi-login enabled.")
+    except Exception as e:
+        print(f"Warning: Failed to auto-restart OpenVPN: {e}")
+        print("Please manually run: systemctl restart openvpn-server@server")
 
 
 def install_ovnode():
@@ -342,8 +350,8 @@ def deactivate_ovnode() -> None:
     subprocess.run(["rm", "-f", "/etc/systemd/system/ov-node.service"])
 
 
-def change_port():
-    """Change the OV-Node service port in .env and restart, without reinstalling."""
+def change_node_config():
+    """Change OV-Node port and/or API key without reinstalling."""
     env_file = "/opt/ov-node/.env"
     try:
         if not os.path.exists(env_file):
@@ -352,46 +360,69 @@ def change_port():
             menu()
             return
 
-        current = ""
+        current_port = ""
+        current_key = ""
         with open(env_file, "r") as f:
             for line in f:
-                if line.strip().replace(" ", "").startswith("SERVICE_PORT="):
-                    current = line.strip().split("=", 1)[1].strip()
-        print(Fore.CYAN + f"Current node port: {current or 'unknown'}" + Style.RESET_ALL)
+                line_stripped = line.strip().replace(" ", "")
+                if line_stripped.startswith("SERVICE_PORT="):
+                    current_port = line_stripped.split("=", 1)[1].strip()
+                elif line_stripped.startswith("API_KEY="):
+                    current_key = line_stripped.split("=", 1)[1].strip()
 
-        new_port = input("New node service port: ").strip()
+        print(Fore.CYAN + f"\nCurrent Node Config:" + Style.RESET_ALL)
+        print(f"  Port   : {current_port or '2083'}")
+        print(f"  API Key: {current_key[:12] + '...' if current_key else 'not set'}")
+
+        print(Fore.YELLOW + "\nLeave blank to keep current value." + Style.RESET_ALL)
+
+        new_port = input("New node service port (default 2083): ").strip()
+        if new_port == "":
+            new_port = current_port or "2083"
         if not new_port.isdigit() or not (1 <= int(new_port) <= 65535):
             print(Fore.RED + "Invalid port." + Style.RESET_ALL)
             input("Press Enter to return to the menu...")
             menu()
             return
 
+        new_key = input("New API key (leave blank to keep): ").strip()
+        if new_key == "":
+            new_key = current_key
+
         lines = []
-        found = False
+        found_port = False
+        found_key = False
         with open(env_file, "r") as f:
             for line in f:
-                if line.strip().replace(" ", "").startswith("SERVICE_PORT="):
+                lstripped = line.strip().replace(" ", "")
+                if lstripped.startswith("SERVICE_PORT="):
                     lines.append(f"SERVICE_PORT = {new_port}\n")
-                    found = True
+                    found_port = True
+                elif lstripped.startswith("API_KEY="):
+                    lines.append(f"API_KEY = {new_key}\n")
+                    found_key = True
                 else:
                     lines.append(line)
-        if not found:
+
+        if not found_port:
             lines.append(f"SERVICE_PORT = {new_port}\n")
+        if not found_key:
+            lines.append(f"API_KEY = {new_key}\n")
+
         with open(env_file, "w") as f:
             f.writelines(lines)
 
         subprocess.run(["systemctl", "restart", "ov-node"], check=True)
-        print(Fore.GREEN + f"Node port changed to {new_port}." + Style.RESET_ALL)
-        print(
-            Fore.YELLOW
-            + "Remember to update this node's port in the panel too."
-            + Style.RESET_ALL
-        )
+        print(Fore.GREEN + f"\nNode config updated!" + Style.RESET_ALL)
+        print(f"  Port: {new_port}")
+        if new_key != current_key:
+            print(f"  New API Key: {new_key}")
+        print(Fore.YELLOW + "Remember to update the node in the panel if you changed the port or key." + Style.RESET_ALL)
         input("Press Enter to return to the menu...")
         menu()
 
     except Exception as e:
-        print(Fore.RED + f"Failed to change port: {e}" + Style.RESET_ALL)
+        print(Fore.RED + f"Failed to change node config: {e}" + Style.RESET_ALL)
         input("Press Enter to return to the menu...")
         menu()
 
@@ -406,7 +437,7 @@ def menu():
     print("  1. Install")
     print("  2. Update")
     print("  3. Restart")
-    print("  4. Change port")
+    print("  4. Change Config (port / api key)")
     print("  5. Uninstall")
     print("  6. Exit")
     print()
@@ -419,7 +450,7 @@ def menu():
     elif choice == "3":
         restart_ovnode()
     elif choice == "4":
-        change_port()
+        change_node_config()
     elif choice == "5":
         uninstall_ovnode()
     elif choice == "6":

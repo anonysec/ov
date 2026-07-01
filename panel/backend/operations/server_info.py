@@ -20,8 +20,14 @@ async def get_server_info() -> ServerInfo:
         )
     except Exception as e:
         logger.error(f"error when get server info: {e}")
-        return ResponseModel(
-            success=False,
-            msg="error when get server info, please check the logs",
-            data=None,
+        # Return a valid ServerInfo with zeros on failure instead of wrong type
+        return ServerInfo(
+            cpu=0.0,
+            memory_total=0,
+            memory_used=0,
+            memory_percent=0.0,
+            disk_total=0,
+            disk_used=0,
+            disk_percent=0.0,
+            uptime=0,
         )

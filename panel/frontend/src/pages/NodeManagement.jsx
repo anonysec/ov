@@ -59,7 +59,7 @@ const NodeManagement = () => {
     const tick = () => {
       if (document.visibilityState === 'visible') fetchAllNodeStatus();
     };
-    intervalId = setInterval(tick, 30000);
+    intervalId = setInterval(tick, 60000);
     document.addEventListener('visibilitychange', tick);
     return () => {
       clearInterval(intervalId);

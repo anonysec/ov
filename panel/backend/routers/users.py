@@ -25,7 +25,7 @@ async def get_all_users(
 ):
     if user["type"] == "main_admin":
         all_users = crud.get_all_users(db)
-        users_list = [Users.from_orm(user) for user in all_users]
+        users_list = [Users.model_validate(user) for user in all_users]
         return ResponseModel(
             success=True,
             msg="Users retrieved successfully",
@@ -34,7 +34,7 @@ async def get_all_users(
 
     elif user["type"] == "admin":
         admin_users = crud.get_users_by_admin(db, admin_username=user["username"])
-        users_list = [Users.from_orm(u) for u in admin_users]
+        users_list = [Users.model_validate(u) for u in admin_users]
         return ResponseModel(
             success=True,
             msg="Users retrieved successfully",
@@ -68,10 +68,15 @@ async def create_user(
         )
 
     if user["type"] == "admin":
-        crud.create_user(db, request, user["username"])
-        return ResponseModel(success=True, msg="User created successfully", data=None)
+        new_user = crud.create_user(db, request, user["username"])
+    else:
+        new_user = crud.create_user(db, request, "owner")
 
-    crud.create_user(db, request, "owner")
+    # Create the user on all nodes + push the max_logins limit immediately
+    from backend.node.task import create_user_on_all_nodes, set_user_limit_on_all_nodes
+    await create_user_on_all_nodes(request.name, db, request.max_logins)
+    await set_user_limit_on_all_nodes(request.name, request.max_logins, db)
+
     return ResponseModel(
         success=True, msg="User created successfully", data=request.name
     )

@@ -212,8 +212,12 @@ def update_node(db: Session, node_id: int, request: NodeCreate):
     node.ovpn_port = request.ovpn_port
     node.protocol = request.protocol
     node.port = request.port
-    node.key = request.key
     node.status = request.status
+
+    # Only overwrite API key if a non-empty value is provided
+    if request.key and request.key.strip():
+        node.key = request.key
+
     db.commit()
     db.refresh(node)
     return node

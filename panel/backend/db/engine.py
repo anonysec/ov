@@ -5,15 +5,15 @@ from pathlib import Path
 BASE_DIR = Path(__file__).resolve().parent
 
 DATABASE_URL = f"sqlite:///{BASE_DIR.parent.parent}/data/ov-panel.db"
-engin = create_engine(url=DATABASE_URL, connect_args={"check_same_thread": False})
+engine = create_engine(url=DATABASE_URL, connect_args={"check_same_thread": False})
 
 Base = declarative_base()
 
-sessionLocal = sessionmaker(bind=engin, autoflush=False)
+SessionLocal = sessionmaker(bind=engine, autoflush=False)
 
 
 def get_db():
-    db = sessionLocal()
+    db = SessionLocal()
     try:
         yield db
     finally:
