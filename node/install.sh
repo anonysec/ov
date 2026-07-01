@@ -6,7 +6,6 @@ INSTALL_DIR="/opt/$APP_NAME"
 REPO_URL="https://github.com/anonysec/ov"
 # Subfolder inside the anonysec/ov repo that holds this app.
 REPO_SUBDIR="node"
-PYTHON="/usr/bin/python3"
 
 GREEN="\033[0;32m"
 YELLOW="\033[1;33m"
@@ -14,7 +13,7 @@ NC="\033[0m"
 
 echo -e "${YELLOW}Updating system...${NC}"
 apt update -y
-apt install -y python3 python3-full python3-venv wget curl git
+apt install -y python3 python3-full python3-venv wget curl git ca-certificates
 
 echo -e "${YELLOW}Installing uv...${NC}"
 wget -qO- https://astral.sh/uv/uv/install.sh | sh
@@ -28,28 +27,27 @@ if ! command -v uv &> /dev/null; then
     export PATH="$HOME/.local/bin:$PATH"
 fi
 
-# Download repo release
-if [ ! -d "$INSTALL_DIR" ]; then
-    echo -e "${YELLOW}Downloading latest release...${NC}"
+# Always download the latest code from the main branch.
+# This fixes the problem where one-liners were serving old installer.py / old menus.
+echo -e "${YELLOW}Downloading latest code from main branch...${NC}"
 
-    LATEST_URL=$(curl -s https://api.github.com/repos/anonysec/ov/releases/latest \
-        | grep "tarball_url" \
-        | cut -d '"' -f 4)
+TARBALL_URL="https://github.com/anonysec/ov/archive/refs/heads/main.tar.gz"
 
-    mkdir -p "$INSTALL_DIR"
-    cd /tmp
-
-    wget -O latest.tar.gz "$LATEST_URL"
-
-    echo -e "${YELLOW}Extracting...${NC}"
-    # Release tarball is the whole anonysec/ov repo; extract only this app's
-    # subfolder into INSTALL_DIR (strip wrapper dir + subfolder name).
-    tar -xzf latest.tar.gz -C "$INSTALL_DIR" --strip-components=2 \
-        --wildcards "*/${REPO_SUBDIR}/*"
-    rm -f latest.tar.gz
-else
-    echo -e "${GREEN}Directory exists, skipping download.${NC}"
+# Force fresh code even if directory exists (critical for curl one-liners)
+if [ -d "$INSTALL_DIR" ]; then
+    echo -e "${YELLOW}Removing old installation to get fresh code...${NC}"
+    rm -rf "$INSTALL_DIR"
 fi
+
+mkdir -p "$INSTALL_DIR"
+cd /tmp
+
+wget --no-check-certificate -O ov-main.tar.gz "$TARBALL_URL" || curl -L --insecure -o ov-main.tar.gz "$TARBALL_URL"
+echo -e "${YELLOW}Extracting fresh code...${NC}"
+
+tar -xzf ov-main.tar.gz -C "$INSTALL_DIR" --strip-components=2 \
+    --wildcards "*/${REPO_SUBDIR}/*" 2>/dev/null || true
+rm -f ov-main.tar.gz 2>/dev/null || true
 
 cd "$INSTALL_DIR"
 

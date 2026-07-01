@@ -248,22 +248,15 @@ def refresh_panel():
     print(f"\n{Fore.YELLOW}Updating OV-Panel...{Style.RESET_ALL}\n")
 
     try:
-        repo = "https://api.github.com/repos/anonysec/ov/releases/latest"
-        repo_subdir = "panel"
-        install_dir = "/opt/ov-panel"
-        env_file = os.path.join(install_dir, ".env")
-        data_dir = os.path.join(install_dir, "data")
-        backup_env = "/tmp/ovpanel_env_backup"
-        backup_data = "/tmp/ovpanel_data_backup"
+        # Always pull from main branch so "Update" gives latest installer.py + menus
+        download_url = "https://github.com/anonysec/ov/archive/refs/heads/main.tar.gz"
+        filename = "/tmp/ov-panel-main.tar.gz"
 
-        response = requests.get(repo)
-        response.raise_for_status()
-        release = response.json()
-        download_url = release["tarball_url"]
-        filename = "/tmp/ov-panel-latest.tar.gz"
-
-        print(f"{Fore.YELLOW}Downloading latest version...{Style.RESET_ALL}")
-        subprocess.run(["wget", "-O", filename, download_url], check=True)
+        print(f"{Fore.YELLOW}Downloading latest code from main branch...{Style.RESET_ALL}")
+        subprocess.run(
+            ["wget", "--no-check-certificate", "-O", filename, download_url],
+            check=True
+        )
 
         if os.path.exists(env_file):
             shutil.copy2(env_file, backup_env)
@@ -274,8 +267,8 @@ def refresh_panel():
             shutil.rmtree(install_dir)
 
         os.makedirs(install_dir, exist_ok=True)
-        # Release tarball contains the whole anonysec/ov repo; extract only the
-        # ov-panel subfolder, stripping the wrapper dir + subfolder name.
+
+        # main.tar.gz contains ov-main/panel/... → strip 2 levels
         subprocess.run(
             [
                 "tar",

@@ -193,57 +193,49 @@ def update_ovnode():
         input("Press Enter to return to the menu...")
         menu()
     try:
-        repo = "https://api.github.com/repos/anonysec/ov/releases/latest"
-        repo_subdir = "node"
-        install_dir = "/opt/ov-node"
-        env_file = os.path.join(install_dir, ".env")
-        backup_env = "/tmp/ovnode_env_backup"
+        # Pull directly from main branch
+download_url = "https://github.com/anonysec/ov/archive/refs/heads/main.tar.gz"
+filename = "/tmp/ov-node-main.tar.gz"
+    print(Fore.YELLOW + "Downloading latest code from main branch..." + Style.RESET_ALL)
+    subprocess.run(
+        ["wget", "--no-check-certificate", "-O", filename, download_url],
+        check=True
+    )
 
-        response = requests.get(repo)
-        response.raise_for_status()
-        release = response.json()
+    if os.path.exists(env_file):
+        shutil.copy2(env_file, backup_env)
 
-        download_url = release["tarball_url"]
-        filename = "/tmp/ov-node-latest.tar.gz"
+    if os.path.exists(install_dir):
+        shutil.rmtree(install_dir)
 
-        print(Fore.YELLOW + f"Downloading {download_url}" + Style.RESET_ALL)
-        subprocess.run(["wget", "-O", filename, download_url], check=True)
+    os.makedirs(install_dir, exist_ok=True)
 
-        if os.path.exists(env_file):
-            shutil.copy2(env_file, backup_env)
+    # main.tar.gz → ov-main/node/...  strip 2 levels
+    subprocess.run(
+        [
+            "tar",
+            "-xzf",
+            filename,
+            "-C",
+            install_dir,
+            "--strip-components=2",
+            "--wildcards",
+            f"*/{repo_subdir}/*",
+        ],
+        check=True,
+    )
 
-        if os.path.exists(install_dir):
-            shutil.rmtree(install_dir)
+    if os.path.exists(backup_env):
+        shutil.move(backup_env, env_file)
 
-        os.makedirs(install_dir, exist_ok=True)
+    print(Fore.YELLOW + "Installing requirements..." + Style.RESET_ALL)
+    os.chdir(install_dir)
+    subprocess.run(["uv", "sync"], check=True)
 
-        # Release tarball contains the whole anonysec/ov repo; extract only the
-        # ov-node subfolder, stripping the wrapper dir + subfolder name.
-        subprocess.run(
-            [
-                "tar",
-                "-xzf",
-                filename,
-                "-C",
-                install_dir,
-                "--strip-components=2",
-                "--wildcards",
-                f"*/{repo_subdir}/*",
-            ],
-            check=True,
-        )
-
-        if os.path.exists(backup_env):
-            shutil.move(backup_env, env_file)
-
-        print(Fore.YELLOW + "Installing requirements..." + Style.RESET_ALL)
-        os.chdir(install_dir)
-        subprocess.run(["uv", "sync"], check=True)
-
-        run_ovnode()
-        print(Fore.GREEN + "OV-Node updated successfully!" + Style.RESET_ALL)
-        input("Press Enter to return to the menu...")
-        menu()
+    run_ovnode()
+    print(Fore.GREEN + "OV-Node updated successfully!" + Style.RESET_ALL)
+    input("Press Enter to return to the menu...")
+    menu()
 
     except Exception as e:
         print(Fore.RED + f"Update failed: {e}" + Style.RESET_ALL)
