@@ -220,9 +220,9 @@ JWT_ACCESS_TOKEN_EXPIRES=86400 # in seconds
             print(f"{Fore.RED}Critical: failed to write .env: {ex}{Style.RESET_ALL}")
             return
 
-        # Informational message only (we always create a good default)
+        # Informational only — we never depend on .env.example existing
         if not os.path.exists(os.path.join(base_dir, ".env.example")):
-            print(f"{Fore.YELLOW}.env.example is missing — using built-in defaults{Style.RESET_ALL}")
+            print(f"{Fore.YELLOW}.env.example not found (using built-in defaults){Style.RESET_ALL}")
 
         # From this point forward we ONLY ever touch .env
         subprocess.run("clear")

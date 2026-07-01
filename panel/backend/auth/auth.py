@@ -10,11 +10,15 @@ from backend.db.engine import get_db
 from backend.config import config
 from backend.db import crud
 
-
 ALGORITHM = "HS256"
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 router = APIRouter(tags=["Login"])
+
+# === Dynamic API prefix support (for URLPATH subpath installs) ===
+# Makes /dash/api/login, /myapp/api/login etc. work when URLPATH is set in .env
+URLPATH = (config.URLPATH or "").strip("/")
+API_PREFIX = f"/{URLPATH}/api" if URLPATH else "/api"
 
 
 def authenticate_user(db: Session, username: str, password: str):
@@ -30,14 +34,12 @@ def authenticate_user(db: Session, username: str, password: str):
 
     return None
 
-
 def create_access_token(data: dict, expires_delta: timedelta | None = None):
     to_encode = data.copy()
     expire = datetime.now() + (expires_delta or timedelta(hours=24))
     to_encode.update({"exp": expire})
 
     return jwt.encode(to_encode, config.JWT_SECRET_KEY, algorithm=ALGORITHM)
-
 
 @router.post("/login")
 async def login(
@@ -58,9 +60,8 @@ async def login(
     )
     return {"access_token": access_token, "token_type": "bearer"}
 
-
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"/api/login")
-
+# OAuth2 scheme must use the same dynamic prefix as the mounted routes
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{API_PREFIX}/login")
 
 def get_current_user(token: str = Depends(oauth2_scheme)):
     credentials_exception = HTTPException(

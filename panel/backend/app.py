@@ -31,6 +31,10 @@ frontend_build_path = os.path.join(os.path.dirname(__file__), "..", "frontend", 
 # Normalize the configured URL path (strip slashes). Empty -> served at root.
 URLPATH = (config.URLPATH or "").strip("/")
 
+# Dynamic API prefix support (for URLPATH subpath installs)
+# This ensures /dash/api/login, /myapp/api/users etc. work correctly.
+API_PREFIX = f"/{URLPATH}/api" if URLPATH else "/api"
+
 api.mount(
     f"/{URLPATH}/assets" if URLPATH else "/assets",
     StaticFiles(directory=os.path.join(frontend_build_path, "assets")),
@@ -72,7 +76,7 @@ async def startup_event():
 
 
 for router in all_routers:
-    api.include_router(prefix="/api", router=router)
+    api.include_router(prefix=API_PREFIX, router=router)
 
 api.include_router(subscription_router)
 
