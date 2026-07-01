@@ -11,12 +11,15 @@ node_modules/
 dist/
 .vite/
 
-# Environment / secrets
+# Environment / secrets - NEVER commit these
 .env
-*.env
+.env.local
+.env.*.local
+
+# Keep only the example template
 !.env.example
 
-# Runtime data (keep the folder, ignore contents)
+# Runtime data
 panel/data/*
 node/data/*
 !panel/data/.gitkeep
@@ -24,6 +27,9 @@ node/data/*
 *.log
 *.db
 *.sqlite3
+
+# Build / temp archives
+*.tar.gz
 
 # Editor / OS
 .DS_Store

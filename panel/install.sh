@@ -3,8 +3,6 @@ set -e
 
 APP_NAME="ov-panel"
 INSTALL_DIR="/opt/$APP_NAME"
-REPO_URL="https://github.com/anonysec/ov"
-# Subfolder inside the anonysec/ov repo that holds this app.
 REPO_SUBDIR="panel"
 
 GREEN="\033[0;32m"
@@ -29,29 +27,44 @@ if ! command -v uv &> /dev/null; then
     export PATH="$HOME/.local/bin:$PATH"
 fi
 
-# Always download the latest code from the main branch.
-# This fixes the problem where bash <(curl -s https://raw.githubusercontent.com/anonysec/ov/main/panel/install.sh)
-# was serving old installer.py / old menus.
-echo -e "${YELLOW}Downloading latest code from main branch...${NC}"
+echo -e "${YELLOW}Downloading latest release...${NC}"
 
-TARBALL_URL="https://github.com/anonysec/ov/archive/refs/heads/main.tar.gz"
+LATEST_URL=$(curl -s https://api.github.com/repos/anonysec/ov/releases/latest \
+    | grep "tarball_url" | cut -d '"' -f 4)
 
-# Remove old install dir contents if it exists, so one-liner always gives fresh installer.py
+if [ -z "$LATEST_URL" ]; then
+    echo -e "${YELLOW}Could not fetch latest release. Falling back to main branch...${NC}"
+    LATEST_URL="https://github.com/anonysec/ov/archive/refs/heads/main.tar.gz"
+fi
+
+# Remove old installation if it exists
 if [ -d "$INSTALL_DIR" ]; then
-    echo -e "${YELLOW}Removing old installation to get fresh code...${NC}"
+    echo -e "${YELLOW}Removing old installation...${NC}"
     rm -rf "$INSTALL_DIR"
 fi
 
 mkdir -p "$INSTALL_DIR"
 cd /tmp
 
-wget --no-check-certificate -O ov-main.tar.gz "$TARBALL_URL" || curl -L --insecure -o ov-main.tar.gz "$TARBALL_URL"
-echo -e "${YELLOW}Extracting fresh code...${NC}"
+wget -O latest.tar.gz "$LATEST_URL" 2>/dev/null || \
+curl -L -o latest.tar.gz "$LATEST_URL"
 
-# ov-main/ + panel/  → strip 2 levels
-tar -xzf ov-main.tar.gz -C "$INSTALL_DIR" --strip-components=2 \
-    --wildcards "*/${REPO_SUBDIR}/*" 2>/dev/null || true
-rm -f ov-main.tar.gz 2>/dev/null || true
+echo -e "${YELLOW}Extracting...${NC}"
+
+rm -rf /tmp/ov-extract
+mkdir -p /tmp/ov-extract
+tar -xzf latest.tar.gz -C /tmp/ov-extract
+
+# Find the extracted root directory
+EXTRACTED_DIR=$(find /tmp/ov-extract -maxdepth 1 -type d ! -path /tmp/ov-extract | head -1)
+
+if [ -d "$EXTRACTED_DIR/${REPO_SUBDIR}" ]; then
+    cp -a "$EXTRACTED_DIR/${REPO_SUBDIR}"/. "$INSTALL_DIR"/
+else
+    cp -a "$EXTRACTED_DIR"/* "$INSTALL_DIR"/ 2>/dev/null || true
+fi
+
+rm -rf /tmp/ov-extract latest.tar.gz
 
 cd "$INSTALL_DIR"
 
@@ -63,6 +76,6 @@ echo -e "${YELLOW}Installing NodeJS...${NC}"
 curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
 apt install -y nodejs build-essential
 
-echo -e "${YELLOW}Installing Python dependencies...${NC}"
+echo -e "${YELLOW}Launching installer...${NC}"
 
 uv run python installer.py
