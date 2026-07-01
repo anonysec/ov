@@ -45,25 +45,27 @@ def ask_user(prompt, allow_empty=False, input_type="text"):
             else:
                 value = input(prompt)
 
-            if not allow_empty and not value.strip():
+            stripped = value.strip()
+            if not allow_empty and not stripped:
                 print(Fore.RED + "Input cannot be empty. Please try again...")
                 time.sleep(2)
                 subprocess.run("clear")
                 continue
             if input_type == "port":
-                try:
-                    port_num = int(value)
-                    if not (1 <= port_num <= 65535):
-                        print(Fore.RED + "Port must be between 1 and 65535.")
+                if stripped:  # only validate non-blank input (blank = keep current)
+                    try:
+                        port_num = int(stripped)
+                        if not (1 <= port_num <= 65535):
+                            print(Fore.RED + "Port must be between 1 and 65535.")
+                            time.sleep(2)
+                            subprocess.run("clear")
+                            continue
+                    except ValueError:
+                        print(Fore.RED + "Port must be a valid number.")
                         time.sleep(2)
                         subprocess.run("clear")
                         continue
-                except ValueError:
-                    print(Fore.RED + "Port must be a valid number.")
-                    time.sleep(2)
-                    subprocess.run("clear")
-                    continue
-            return value.strip()
+            return stripped
         except KeyboardInterrupt:
             print(f"\n\n{Fore.GREEN}Thank you for using OV-Panel!{Style.RESET_ALL}\n")
             sys.exit(0)
@@ -181,13 +183,20 @@ def setup_panel():
             "JWT_SECRET_KEY": create_secret_key(),
         }
 
+        # Robust replace (handles spaces around =, quotes, comments on line)
         lines = []
         with open(".env", "r") as f:
             for line in f:
-                for key, value in replacements.items():
-                    if line.startswith(f"{key}="):
-                        line = f"{key}={value}\n"
-                lines.append(line)
+                stripped = line.strip()
+                replaced = False
+                if stripped and not stripped.startswith("#") and "=" in stripped:
+                    key = stripped.split("=", 1)[0].strip()
+                    if key in replacements:
+                        val = replacements[key]
+                        lines.append(f"{key}={val}\n")
+                        replaced = True
+                if not replaced:
+                    lines.append(line)
 
         with open(".env", "w") as f:
             f.writelines(lines)
@@ -385,15 +394,18 @@ def change_config():
         if new_pass:
             replacements["ADMIN_PASSWORD"] = new_pass
 
+        # robust replace
         lines = []
         with open(env_file, "r") as f:
             for line in f:
+                stripped = line.strip()
                 replaced = False
-                for key, value in replacements.items():
-                    if line.strip().startswith(f"{key}="):
-                        lines.append(f"{key}={value}\n")
+                if stripped and not stripped.startswith("#") and "=" in stripped:
+                    key = stripped.split("=", 1)[0].strip()
+                    if key in replacements:
+                        val = replacements[key]
+                        lines.append(f"{key}={val}\n")
                         replaced = True
-                        break
                 if not replaced:
                     lines.append(line)
 

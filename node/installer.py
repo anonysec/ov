@@ -157,15 +157,18 @@ def install_ovnode():
             "API_KEY": API_KEY,
         }
 
+        # robust replace for fresh install
         lines = []
         with open(".env", "r") as f:
             for line in f:
+                stripped = line.strip()
                 replaced = False
-                for key, value in replacements.items():
-                    if line.startswith(f"{key}"):
-                        lines.append(f"{key}={value}\n")
+                if stripped and not stripped.startswith("#") and "=" in stripped:
+                    key = stripped.split("=", 1)[0].strip()
+                    if key in replacements:
+                        val = replacements[key]
+                        lines.append(f"{key}={val}\n")
                         replaced = True
-                        break
                 if not replaced:
                     lines.append(line)
 
@@ -350,6 +353,27 @@ def deactivate_ovnode() -> None:
     subprocess.run(["rm", "-f", "/etc/systemd/system/ov-node.service"])
 
 
+def _update_env_file(env_path, replacements):
+    """Robust .env updater: matches keys ignoring spaces around = and comments."""
+    if not os.path.exists(env_path):
+        return
+    lines = []
+    with open(env_path, "r") as f:
+        for line in f:
+            stripped = line.strip()
+            replaced = False
+            if stripped and not stripped.startswith("#") and "=" in stripped:
+                key = stripped.split("=", 1)[0].strip()
+                if key in replacements:
+                    val = replacements[key]
+                    lines.append(f"{key}={val}\n")
+                    replaced = True
+            if not replaced:
+                lines.append(line)
+    with open(env_path, "w") as f:
+        f.writelines(lines)
+
+
 def change_node_config():
     """Change OV-Node port and/or API key without reinstalling."""
     env_file = "/opt/ov-node/.env"
@@ -364,11 +388,14 @@ def change_node_config():
         current_key = ""
         with open(env_file, "r") as f:
             for line in f:
-                line_stripped = line.strip().replace(" ", "")
-                if line_stripped.startswith("SERVICE_PORT="):
-                    current_port = line_stripped.split("=", 1)[1].strip()
-                elif line_stripped.startswith("API_KEY="):
-                    current_key = line_stripped.split("=", 1)[1].strip()
+                stripped = line.strip()
+                if stripped and not stripped.startswith("#") and "=" in stripped:
+                    key = stripped.split("=", 1)[0].strip()
+                    val = stripped.split("=", 1)[1].strip()
+                    if key == "SERVICE_PORT":
+                        current_port = val
+                    elif key == "API_KEY":
+                        current_key = val
 
         print(Fore.CYAN + f"\nCurrent Node Config:" + Style.RESET_ALL)
         print(f"  Port   : {current_port or '2083'}")
@@ -376,7 +403,7 @@ def change_node_config():
 
         print(Fore.YELLOW + "\nLeave blank to keep current value." + Style.RESET_ALL)
 
-        new_port = input("New node service port (default 2083): ").strip()
+        new_port = input("New node service port (leave blank to keep): ").strip()
         if new_port == "":
             new_port = current_port or "2083"
         if not new_port.isdigit() or not (1 <= int(new_port) <= 65535):
@@ -389,28 +416,11 @@ def change_node_config():
         if new_key == "":
             new_key = current_key
 
-        lines = []
-        found_port = False
-        found_key = False
-        with open(env_file, "r") as f:
-            for line in f:
-                lstripped = line.strip().replace(" ", "")
-                if lstripped.startswith("SERVICE_PORT="):
-                    lines.append(f"SERVICE_PORT = {new_port}\n")
-                    found_port = True
-                elif lstripped.startswith("API_KEY="):
-                    lines.append(f"API_KEY = {new_key}\n")
-                    found_key = True
-                else:
-                    lines.append(line)
-
-        if not found_port:
-            lines.append(f"SERVICE_PORT = {new_port}\n")
-        if not found_key:
-            lines.append(f"API_KEY = {new_key}\n")
-
-        with open(env_file, "w") as f:
-            f.writelines(lines)
+        replacements = {
+            "SERVICE_PORT": new_port,
+            "API_KEY": new_key,
+        }
+        _update_env_file(env_file, replacements)
 
         subprocess.run(["systemctl", "restart", "ov-node"], check=True)
         print(Fore.GREEN + f"\nNode config updated!" + Style.RESET_ALL)
