@@ -6,7 +6,7 @@ import { BrowserRouter } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext.jsx';
 import './i18n';
 
-const raw = (import.meta.env.VITE_URLPATH || '').trim();
+const raw = (import.meta.env.VITE_URLPATH || '').trim().replace(/^\/+|\/+$/g, '');
 const base = raw ? raw : '';
 
 ReactDOM.createRoot(document.getElementById('root')).render(

@@ -45,8 +45,8 @@ async def get_subscription(
     for node, up in zip(nodes, results):
         if not up:
             continue
-        ovpn_download_links[node.name] = (
-            f"{request.base_url}{config.SUBSCRIPTION_PATH}/download/{uuid}/{node.name}"
+        ovpn_download_links[node.name] = str(
+            request.url_for("download_ovpn", uuid=uuid, node_name=node.name)
         )
 
     return templates.TemplateResponse(

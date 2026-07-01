@@ -2,7 +2,7 @@ import axios from 'axios';
 
 
 // Respect VITE_URLPATH for baseURL when panel is installed under a subpath
-const basePath = (import.meta.env.VITE_URLPATH || '').trim();
+const basePath = (import.meta.env.VITE_URLPATH || '').trim().replace(/^\/+|\/+$/g, '');
 const apiBase = basePath ? `/${basePath}/api` : '/api';
 
 const apiClient = axios.create({

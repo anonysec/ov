@@ -14,32 +14,35 @@ from backend.routers.sub import router as subscription_router
 from backend.version import __version__
 
 
-api = FastAPI(
-    title="OVPanel API",
-    description="API for managing OVPanel",
-    version=__version__,
-    docs_url="/doc" if config.DOC else None,
-)
-
-@api.get("/health", tags=["Health"])
-async def health_check():
-    """Simple health check endpoint."""
-    return {"status": "ok", "version": __version__}
-
-frontend_build_path = os.path.join(os.path.dirname(__file__), "..", "frontend", "dist")
-
 # Normalize the configured URL path (strip slashes). Empty -> served at root.
 URLPATH = (config.URLPATH or "").strip("/")
 
 # Dynamic API prefix support (for URLPATH subpath installs)
 # This ensures /dash/api/login, /myapp/api/users etc. work correctly.
 API_PREFIX = f"/{URLPATH}/api" if URLPATH else "/api"
+DOC_PREFIX = f"/{URLPATH}" if URLPATH else ""
 
-api.mount(
-    f"/{URLPATH}/assets" if URLPATH else "/assets",
-    StaticFiles(directory=os.path.join(frontend_build_path, "assets")),
-    name="assets",
+api = FastAPI(
+    title="OVPanel API",
+    description="API for managing OVPanel",
+    version=__version__,
+    docs_url=f"{DOC_PREFIX}/doc" if config.DOC else None,
+    openapi_url=f"{DOC_PREFIX}/openapi.json" if config.DOC else None,
 )
+
+@api.get(f"{API_PREFIX}/health", tags=["Health"])
+async def health_check():
+    """Simple health check endpoint."""
+    return {"status": "ok", "version": __version__}
+
+frontend_build_path = os.path.join(os.path.dirname(__file__), "..", "frontend", "dist")
+assets_path = os.path.join(frontend_build_path, "assets")
+if os.path.isdir(assets_path):
+    api.mount(
+        f"/{URLPATH}/assets" if URLPATH else "/assets",
+        StaticFiles(directory=assets_path),
+        name="assets",
+    )
 
 api.add_middleware(
     CORSMiddleware,
@@ -78,7 +81,7 @@ async def startup_event():
 for router in all_routers:
     api.include_router(prefix=API_PREFIX, router=router)
 
-api.include_router(subscription_router)
+api.include_router(subscription_router, prefix=f"/{URLPATH}" if URLPATH else "")
 
 
 async def _serve_react():

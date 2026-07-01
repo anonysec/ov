@@ -1,6 +1,5 @@
 import os
 import re
-import requests
 import sys
 import subprocess
 import shutil
@@ -128,7 +127,7 @@ def show_banner():
     banner = f"""
 {Fore.CYAN}
 ╔════════════════════════╗
-║   OVPANEL  v1.2.20     ║
+║   OVPANEL  v1.3.0     ║
 ╚════════════════════════╝
 {Style.RESET_ALL}
 """
@@ -265,7 +264,10 @@ JWT_ACCESS_TOKEN_EXPIRES=86400 # in seconds
         )
         panel_path = ask_user(
             f"{Fore.GREEN}> Panel path (optional): {Style.RESET_ALL}", allow_empty=True
-        )
+        ).strip().strip("/")
+        if panel_path in {"api", "assets", "doc", "openapi.json", "health", "sub"}:
+            print(f"{Fore.RED}Panel path '{panel_path}' is reserved. Please choose another path.{Style.RESET_ALL}")
+            return
 
         replacements = {
             "ADMIN_USERNAME": panel_username,
@@ -393,12 +395,13 @@ def refresh_panel():
 
         os.chdir(install_dir)
 
+        uv_bin = get_uv_path()
+        run_command([uv_bin, "sync", "--refresh"], check=True)
+
         if not build_frontend():
             print(f"{Fore.RED}Frontend build failed!{Style.RESET_ALL}")
             return
 
-        uv_bin = get_uv_path()
-        run_command([uv_bin, "sync", "--refresh"], check=True)
         apply_migrations()
         start_service()
 
@@ -584,14 +587,15 @@ def start_service() -> None:
     path = "/etc/systemd/system/ov-panel.service"
     if os.path.exists(path):
         os.remove(path)
-    service_content = """
+    uv_bin = get_uv_path()
+    service_content = f"""
 [Unit]
 Description=OV-Panel App
 After=network.target
 
 [Service]
 WorkingDirectory=/opt/ov-panel
-ExecStart=/root/.local/bin/uv run main.py
+ExecStart={uv_bin} run main.py
 Restart=always
 RestartSec=5
 User=root

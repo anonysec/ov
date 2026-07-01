@@ -13,7 +13,7 @@ NC="\033[0m"
 
 echo -e "${YELLOW}Updating system...${NC}"
 apt update -y
-apt install -y python3 python3-full python3-venv wget curl git ca-certificates
+apt install -y python3 python3-full python3-venv wget curl git ca-certificates build-essential
 
 echo -e "${YELLOW}Installing uv...${NC}"
 wget -qO- https://astral.sh/uv/uv/install.sh | sh
@@ -100,12 +100,12 @@ rm -rf /tmp/ov-extract latest.tar.gz
 cd "$INSTALL_DIR"
 
 echo -e "${YELLOW}Installing dependencies...${NC}"
-uv sync
-
-# Node.js (needed for frontend)
+# Node.js (needed for frontend) must be present before installer.py builds React.
 echo -e "${YELLOW}Installing NodeJS...${NC}"
 curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
-apt install -y nodejs build-essential
+apt install -y nodejs
+
+uv sync
 
 echo -e "${YELLOW}Launching installer...${NC}"
 

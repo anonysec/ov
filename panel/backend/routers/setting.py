@@ -17,13 +17,15 @@ async def get_settings(
     db: Session = Depends(get_db),
     user: str = Depends(get_current_user),
 ):
+    urlpath = (config.URLPATH or "").strip("/")
+    subscription_prefix = (
+        config.SUBSCRIPTION_URL_PREFIX.rstrip("/") + "/"
+        if config.SUBSCRIPTION_URL_PREFIX
+        else str(request.base_url).rstrip("/") + (f"/{urlpath}/" if urlpath else "/")
+    )
     settings = Settings(
-        subscription_path=config.SUBSCRIPTION_PATH,
-        subscription_url_prefix=(
-            config.SUBSCRIPTION_URL_PREFIX + "/"
-            if config.SUBSCRIPTION_URL_PREFIX is not None
-            else str(request.base_url)
-        ),
+        subscription_path=config.SUBSCRIPTION_PATH.strip("/"),
+        subscription_url_prefix=subscription_prefix,
     )
     return ResponseModel(
         success=True,

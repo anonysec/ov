@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import logoSrc from '../assets/Logo-Dark.webp'; 
+import logoSrc from '../assets/openvpn-icon.png'; 
 
 const LoginPage = () => {
   const [username, setUsername] = useState('');
