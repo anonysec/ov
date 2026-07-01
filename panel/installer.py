@@ -30,6 +30,36 @@ def get_server_ip():
         return "your-server-ip"
 
 
+def get_uv_path():
+    """Find uv executable robustly (handles different install locations)."""
+    candidates = [
+        shutil.which("uv"),
+        os.path.expanduser("~/.local/bin/uv"),
+        "/root/.local/bin/uv",
+        "/usr/local/bin/uv",
+    ]
+    for p in candidates:
+        if p and os.path.isfile(p) and os.access(p, os.X_OK):
+            return p
+    return "uv"  # fallback, will raise clear error if not found
+
+
+def run_command(cmd, cwd=None, env=None, check=True):
+    """Run command with enhanced PATH for uv/npm etc."""
+    if env is None:
+        env = os.environ.copy()
+    # Ensure common uv locations are in PATH
+    local_bin = os.path.expanduser("~/.local/bin")
+    root_local = "/root/.local/bin"
+    if local_bin not in env.get("PATH", ""):
+        env["PATH"] = f"{local_bin}:{root_local}:{env.get('PATH', '')}"
+    try:
+        return subprocess.run(cmd, cwd=cwd, env=env, check=check, capture_output=True, text=True)
+    except FileNotFoundError as e:
+        # Re-raise with more context
+        raise FileNotFoundError(f"Command not found: {cmd[0]}. Make sure uv/npm are installed. Original: {e}") from e
+
+
 def display_panel_info(username, password, port, path):
     subprocess.run("clear")
     server_ip = get_server_ip()
@@ -98,7 +128,7 @@ def show_banner():
     banner = f"""
 {Fore.CYAN}
 ╔════════════════════════╗
-║   OVPANEL  v1.2.19     ║
+║   OVPANEL  v1.2.20     ║
 ╚════════════════════════╝
 {Style.RESET_ALL}
 """
@@ -262,7 +292,8 @@ JWT_ACCESS_TOKEN_EXPIRES=86400 # in seconds
         with open(".env", "w") as f:
             f.writelines(lines)
 
-        subprocess.run(["uv", "sync"], check=True)
+        uv_bin = get_uv_path()
+        run_command([uv_bin, "sync"], check=True)
         if not build_frontend():
             print(f"{Fore.RED}Frontend build failed!{Style.RESET_ALL}")
             return
@@ -292,7 +323,14 @@ JWT_ACCESS_TOKEN_EXPIRES=86400 # in seconds
 
 
 def refresh_panel():
-    if not os.path.exists("/opt/ov-panel"):
+    install_dir = "/opt/ov-panel"
+    env_file = os.path.join(install_dir, ".env")
+    backup_env = "/tmp/ov-panel.env.bak"
+    data_dir = os.path.join(install_dir, "data")
+    backup_data = "/tmp/ov-panel-data.bak"
+    repo_subdir = "panel"
+
+    if not os.path.exists(install_dir):
         subprocess.run("clear")
         print(
             f"\n{Fore.MAGENTA}OV-Panel is not installed on your system.{Style.RESET_ALL}"
@@ -353,12 +391,14 @@ def refresh_panel():
                 shutil.rmtree(data_dir)
             shutil.move(backup_data, data_dir)
 
+        os.chdir(install_dir)
+
         if not build_frontend():
             print(f"{Fore.RED}Frontend build failed!{Style.RESET_ALL}")
             return
 
-        os.chdir(install_dir)
-        subprocess.run(["uv", "sync", "--refresh"], check=True)
+        uv_bin = get_uv_path()
+        run_command([uv_bin, "sync", "--refresh"], check=True)
         apply_migrations()
         start_service()
 
@@ -483,26 +523,52 @@ def remove_panel():
 
 def build_frontend() -> bool:
     try:
-        frontend_dir = "/opt/ov-panel/frontend"
-        subprocess.run(["npm", "install"], cwd=frontend_dir)
-        subprocess.run(["npm", "run", "build"], cwd=frontend_dir)
+        # Use dynamic path based on current working dir (after chdir in setup)
+        # Falls back to the standard /opt location
+        cwd = os.getcwd()
+        if os.path.isdir(os.path.join(cwd, "frontend")):
+            frontend_dir = os.path.join(cwd, "frontend")
+        else:
+            frontend_dir = "/opt/ov-panel/frontend"
+
+        if not os.path.isdir(frontend_dir):
+            print(f"{Fore.RED}Frontend directory not found at {frontend_dir}{Style.RESET_ALL}")
+            return False
+
+        print(f"{Fore.YELLOW}Building frontend in {frontend_dir}...{Style.RESET_ALL}")
+        run_command(["npm", "install"], cwd=frontend_dir, check=True)
+        run_command(["npm", "run", "build"], cwd=frontend_dir, check=True)
         return True
+    except FileNotFoundError as e:
+        print(f"{Fore.RED}Frontend build failed (missing command or dir): {e}{Style.RESET_ALL}")
+        return False
     except Exception as e:
         print(f"{Fore.RED}Failed to build frontend: {str(e)}{Style.RESET_ALL}")
         return False
 
 
 def apply_migrations() -> None:
-    backend_dir = "/opt/ov-panel/backend"
+    # Use current working directory (set by setup_panel chdir) or fallback
+    cwd = os.getcwd()
+    if os.path.isdir(os.path.join(cwd, "backend")):
+        backend_dir = os.path.join(cwd, "backend")
+    else:
+        backend_dir = "/opt/ov-panel/backend"
+
     current_dir = os.getcwd()
 
     try:
+        if not os.path.isdir(backend_dir):
+            print(f"{Fore.YELLOW}Backend dir not found for migrations, skipping.{Style.RESET_ALL}")
+            return
+
         os.chdir(backend_dir)
         if not os.path.exists("alembic.ini"):
             return
 
         print(f"{Fore.YELLOW}Running Alembic migration...{Style.RESET_ALL}")
-        subprocess.run(["alembic", "upgrade", "head"], check=True)
+        # Use the robust run_command (it enhances PATH)
+        run_command(["alembic", "upgrade", "head"], check=True)
 
         print(f"{Fore.GREEN}Database migrated successfully!{Style.RESET_ALL}")
 
