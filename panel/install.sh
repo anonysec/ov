@@ -55,13 +55,44 @@ rm -rf /tmp/ov-extract
 mkdir -p /tmp/ov-extract
 tar -xzf latest.tar.gz -C /tmp/ov-extract
 
-# Find the extracted root directory
-EXTRACTED_DIR=$(find /tmp/ov-extract -maxdepth 1 -type d ! -path /tmp/ov-extract | head -1)
+# Robust extraction: release tarball structure is <wrapper>/panel/...
+# Always find the single top-level wrapper dir
+WRAPPER_DIR=$(find /tmp/ov-extract -mindepth 1 -maxdepth 1 -type d | head -1)
 
-if [ -d "$EXTRACTED_DIR/${REPO_SUBDIR}" ]; then
-    cp -a "$EXTRACTED_DIR/${REPO_SUBDIR}"/. "$INSTALL_DIR"/
+if [ -n "$WRAPPER_DIR" ] && [ -d "$WRAPPER_DIR/$REPO_SUBDIR" ]; then
+    echo -e "${YELLOW}Found wrapper: $(basename $WRAPPER_DIR), copying $REPO_SUBDIR/...${NC}"
+    cp -a "$WRAPPER_DIR/$REPO_SUBDIR"/. "$INSTALL_DIR"/
 else
-    cp -a "$EXTRACTED_DIR"/* "$INSTALL_DIR"/ 2>/dev/null || true
+    # Fallbacks for unusual tarballs
+    PANEL_DIR=$(find /tmp/ov-extract -type d -name "$REPO_SUBDIR" 2>/dev/null | head -1)
+    if [ -n "$PANEL_DIR" ]; then
+        cp -a "$PANEL_DIR"/. "$INSTALL_DIR"/
+    else
+        EXTRACTED_DIR=$(find /tmp/ov-extract -mindepth 1 -maxdepth 1 -type d | head -1)
+        cp -a "$EXTRACTED_DIR"/* "$INSTALL_DIR"/ 2>/dev/null || true
+    fi
+fi
+
+# Explicitly locate and copy .env.example from panel/ subdir inside tarball
+# Strict: only top-level panel/ (exclude any nested like backend/node)
+ENV_EXAMPLE=$(find /tmp/ov-extract -type f -path "*/$REPO_SUBDIR/.env.example" ! -path "*backend*" 2>/dev/null | head -1)
+if [ -n "$ENV_EXAMPLE" ]; then
+    cp -f "$ENV_EXAMPLE" "$INSTALL_DIR/.env.example" 2>/dev/null || true
+    echo -e "${YELLOW}Copied .env.example from release tarball${NC}"
+fi
+
+# Final verification / fallback copy
+if [ ! -f "$INSTALL_DIR/.env.example" ]; then
+    if [ -n "$WRAPPER_DIR" ] && [ -f "$WRAPPER_DIR/$REPO_SUBDIR/.env.example" ]; then
+        cp -f "$WRAPPER_DIR/$REPO_SUBDIR/.env.example" "$INSTALL_DIR/.env.example"
+    elif [ -f "$INSTALL_DIR/panel/.env.example" ]; then
+        # rare case
+        cp -f "$INSTALL_DIR/panel/.env.example" "$INSTALL_DIR/.env.example"
+    fi
+fi
+
+if [ ! -f "$INSTALL_DIR/.env.example" ]; then
+    echo -e "${YELLOW}Warning: .env.example still missing after extraction (installer.py has fallback)${NC}"
 fi
 
 rm -rf /tmp/ov-extract latest.tar.gz

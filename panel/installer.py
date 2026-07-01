@@ -97,9 +97,9 @@ def show_banner():
     subprocess.run("clear")
     banner = f"""
 {Fore.CYAN}
-╔═══════════════════╗
-║      OVPANEL      ║
-╚═══════════════════╝
+╔════════════════════════╗
+║   OVPANEL  v1.2.18     ║
+╚════════════════════════╝
 {Style.RESET_ALL}
 """
     print(banner)
