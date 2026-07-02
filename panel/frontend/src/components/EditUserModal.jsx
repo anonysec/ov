@@ -57,7 +57,7 @@ const EditUserModal = ({ user, onClose, onUserUpdated }) => {
     };
 
     try {
-      const response = await apiClient.put(`/users/${user.uuid}/`, payload);
+      const response = await apiClient.put(`/users/${user.uuid}`, payload);
       if (response.data.success) {
         alert('User updated successfully.');
         onUserUpdated();

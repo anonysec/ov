@@ -11,7 +11,7 @@ from colorama import Fore, Style, init
 
 init(autoreset=True)
 
-VERSION = "1.3.2"
+VERSION = "1.3.3"
 APP_NAME = "ov-node"
 INSTALL_DIR = Path(f"/opt/{APP_NAME}")
 REPO = "anonysec/ov"
@@ -90,6 +90,26 @@ def setup_multilogin() -> None:
     scripts_dst.mkdir(parents=True, exist_ok=True)
     limits_dir.mkdir(parents=True, exist_ok=True)
     active_dir.mkdir(parents=True, exist_ok=True)
+
+    ovpn_user = "nobody"
+    ovpn_group = "nogroup"
+    if server_conf.exists():
+        for line in server_conf.read_text(encoding="utf-8").splitlines():
+            parts = line.strip().split()
+            if len(parts) >= 2 and parts[0] == "user":
+                ovpn_user = parts[1]
+            elif len(parts) >= 2 and parts[0] == "group":
+                ovpn_group = parts[1]
+
+    lock_file = active_dir / ".lock"
+    lock_file.touch(exist_ok=True)
+    try:
+        shutil.chown(active_dir, user=ovpn_user, group=ovpn_group)
+        shutil.chown(lock_file, user=ovpn_user, group=ovpn_group)
+    except Exception:
+        pass
+    active_dir.chmod(0o755)
+    lock_file.chmod(0o664)
 
     connect_dst = scripts_dst / "ovpanel-client-connect.sh"
     disconnect_dst = scripts_dst / "ovpanel-client-disconnect.sh"

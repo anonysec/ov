@@ -9,7 +9,7 @@ set -euo pipefail
 
 LIMITS_DIR="/etc/openvpn/limits"
 ACTIVE_DIR="/etc/openvpn/ovpanel-active"
-LOCK_FILE="/etc/openvpn/ovpanel-login.lock"
+LOCK_FILE="${ACTIVE_DIR}/.lock"
 STATUS_FILE="${OVPANEL_STATUS_FILE:-/var/log/openvpn-status.log}"
 DEFAULT_LIMIT=1
 LOG_TAG="ovpanel-mlogin"

@@ -19,6 +19,7 @@ when it actually changed something.
 import os
 import shutil
 import subprocess
+from pathlib import Path
 
 from core.logger import logger
 
@@ -26,6 +27,7 @@ SERVER_CONF = "/etc/openvpn/server/server.conf"
 SCRIPTS_DST_DIR = "/etc/openvpn/scripts"
 LIMITS_DIR = "/etc/openvpn/limits"
 ACTIVE_DIR = "/etc/openvpn/ovpanel-active"
+LOCK_FILE = os.path.join(ACTIVE_DIR, ".lock")
 SCRIPTS_SRC_DIR = os.path.join(os.path.dirname(__file__), "..", "scripts")
 
 CONNECT_DST = os.path.join(SCRIPTS_DST_DIR, "ovpanel-client-connect.sh")
@@ -44,12 +46,54 @@ REQUIRED_DIRECTIVES = [
 ]
 
 
+def _openvpn_runtime_user_group() -> tuple[str, str]:
+    """Return the user/group OpenVPN drops privileges to.
+
+    Hook scripts run as this user, not root. The active-session registry and
+    lock file must therefore be writable by this account; otherwise OpenVPN
+    returns AUTH_FAILED even for the first valid client.
+    """
+    user = "nobody"
+    group = "nogroup"
+    try:
+        if os.path.exists(SERVER_CONF):
+            for line in Path(SERVER_CONF).read_text(encoding="utf-8").splitlines():
+                parts = line.strip().split()
+                if len(parts) >= 2 and parts[0] == "user":
+                    user = parts[1]
+                elif len(parts) >= 2 and parts[0] == "group":
+                    group = parts[1]
+    except Exception as e:
+        logger.warning("multilogin: failed to read OpenVPN runtime user/group: %s", e)
+    return user, group
+
+
+def _fix_runtime_permissions() -> None:
+    """Make the registry writable by the OpenVPN hook runtime user."""
+    os.makedirs(LIMITS_DIR, exist_ok=True)
+    os.makedirs(ACTIVE_DIR, exist_ok=True)
+    Path(LOCK_FILE).touch(exist_ok=True)
+
+    user, group = _openvpn_runtime_user_group()
+    try:
+        shutil.chown(ACTIVE_DIR, user=user, group=group)
+        shutil.chown(LOCK_FILE, user=user, group=group)
+    except Exception as e:
+        logger.warning(
+            "multilogin: failed to chown registry to %s:%s: %s", user, group, e
+        )
+    try:
+        os.chmod(ACTIVE_DIR, 0o755)
+        os.chmod(LOCK_FILE, 0o664)
+    except Exception as e:
+        logger.warning("multilogin: failed to chmod registry/lock: %s", e)
+
+
 def _install_scripts() -> bool:
     """Copy the enforcement scripts into place. Returns True if anything changed."""
     changed = False
     os.makedirs(SCRIPTS_DST_DIR, exist_ok=True)
-    os.makedirs(LIMITS_DIR, exist_ok=True)
-    os.makedirs(ACTIVE_DIR, exist_ok=True)
+    _fix_runtime_permissions()
 
     for fname, dst in (
         ("ovpanel-client-connect.sh", CONNECT_DST),
@@ -130,6 +174,8 @@ def ensure_multilogin_setup() -> None:
     try:
         scripts_changed = _install_scripts()
         conf_changed = _patch_server_conf()
+        # server.conf may have been created/edited after _install_scripts() read it.
+        _fix_runtime_permissions()
         if scripts_changed or conf_changed:
             # OpenVPN must reload to pick up new hooks or changed hook contents.
             _restart_openvpn()

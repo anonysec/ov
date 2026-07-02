@@ -83,6 +83,7 @@ async def create_user(
     )
 
 
+@router.put("/{uuid}/", response_model=ResponseModel, include_in_schema=False)
 @router.put("/{uuid}", response_model=ResponseModel)
 async def update_user(
     uuid: str,
