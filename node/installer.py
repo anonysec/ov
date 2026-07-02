@@ -11,7 +11,7 @@ from colorama import Fore, Style, init
 
 init(autoreset=True)
 
-VERSION = "1.3.1"
+VERSION = "1.3.2"
 APP_NAME = "ov-node"
 INSTALL_DIR = Path(f"/opt/{APP_NAME}")
 REPO = "anonysec/ov"
@@ -84,10 +84,12 @@ def setup_multilogin() -> None:
     server_conf = Path("/etc/openvpn/server/server.conf")
     scripts_dst = Path("/etc/openvpn/scripts")
     limits_dir = Path("/etc/openvpn/limits")
+    active_dir = Path("/etc/openvpn/ovpanel-active")
     src_dir = Path(__file__).resolve().parent / "core" / "scripts"
 
     scripts_dst.mkdir(parents=True, exist_ok=True)
     limits_dir.mkdir(parents=True, exist_ok=True)
+    active_dir.mkdir(parents=True, exist_ok=True)
 
     connect_dst = scripts_dst / "ovpanel-client-connect.sh"
     disconnect_dst = scripts_dst / "ovpanel-client-disconnect.sh"

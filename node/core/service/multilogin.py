@@ -8,9 +8,9 @@ actually enforced on connect:
   ``status`` log (the connect script counts live sessions from it),
 * enforcement policy: REJECT the new connection when the limit is reached.
 
-The connect script counts current sessions from the status log rather than a
-persistent counter, so it stays correct across the OpenVPN service restarts
-that ov-node performs on activate/deactivate and settings changes.
+The connect script uses a small active-session registry plus the OpenVPN status
+log. The registry prevents race conditions where two devices connect before the
+status log refreshes; the status log is a safety fallback.
 
 It is safe to run repeatedly (on every app start). It only restarts OpenVPN
 when it actually changed something.
@@ -25,6 +25,7 @@ from core.logger import logger
 SERVER_CONF = "/etc/openvpn/server/server.conf"
 SCRIPTS_DST_DIR = "/etc/openvpn/scripts"
 LIMITS_DIR = "/etc/openvpn/limits"
+ACTIVE_DIR = "/etc/openvpn/ovpanel-active"
 SCRIPTS_SRC_DIR = os.path.join(os.path.dirname(__file__), "..", "scripts")
 
 CONNECT_DST = os.path.join(SCRIPTS_DST_DIR, "ovpanel-client-connect.sh")
@@ -48,6 +49,7 @@ def _install_scripts() -> bool:
     changed = False
     os.makedirs(SCRIPTS_DST_DIR, exist_ok=True)
     os.makedirs(LIMITS_DIR, exist_ok=True)
+    os.makedirs(ACTIVE_DIR, exist_ok=True)
 
     for fname, dst in (
         ("ovpanel-client-connect.sh", CONNECT_DST),
@@ -128,8 +130,8 @@ def ensure_multilogin_setup() -> None:
     try:
         scripts_changed = _install_scripts()
         conf_changed = _patch_server_conf()
-        if conf_changed:
-            # server.conf changed -> OpenVPN must reload to pick up the hooks.
+        if scripts_changed or conf_changed:
+            # OpenVPN must reload to pick up new hooks or changed hook contents.
             _restart_openvpn()
         if scripts_changed or conf_changed:
             logger.info("multilogin: setup applied (scripts=%s, conf=%s)",
