@@ -66,7 +66,11 @@ active_files="$(find "$ACTIVE_DIR" -type f -name "${safe_cn}.*" 2>/dev/null | wc
 # cleared while sessions are still up.
 status_count=0
 if [[ -f "$STATUS_FILE" ]]; then
-    status_count="$(awk -F',' -v cn="$cn" '$1 == "CLIENT_LIST" && $2 == cn { c++ } END { print c+0 }' "$STATUS_FILE" 2>/dev/null || echo 0)"
+    status_count="$(awk -v cn="$cn" '
+        BEGIN { FS="[,\t]" }
+        $1 == "CLIENT_LIST" && $2 == cn { c++ }
+        END { print c+0 }
+    ' "$STATUS_FILE" 2>/dev/null || echo 0)"
 fi
 
 cur="$active_files"

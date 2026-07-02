@@ -95,23 +95,23 @@ const NodeManagement = () => {
     try {
       const response = await apiClient.delete(`/nodes/${nodeId}`);
       if (response.data.success) {
-        alert('Node deleted successfully.');
+        console.warn('Node deleted successfully.');
         fetchNodes();
       } else {
-        alert(response.data.msg || 'Unable to delete node.');
+        console.warn(response.data.msg || 'Unable to delete node.');
       }
     } catch {
-      alert('Error deleting node.');
+      console.warn('Error deleting node.');
     }
   };
 
   const handleCheckStatus = async (nodeId) => {
     try {
       const response = await apiClient.get(`/nodes/${nodeId}/status/`);
-      alert(response.data.msg || 'Status check complete.');
+      console.warn(response.data.msg || 'Status check complete.');
       fetchNodes();
     } catch {
-      alert('Failed to check node status.');
+      console.warn('Failed to check node status.');
     }
   };
 

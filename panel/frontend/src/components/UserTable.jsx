@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { FiCopy } from 'react-icons/fi';
 import ActionsDropdown from './ActionsDropdown';
@@ -5,6 +6,7 @@ import './UserTable.css';
 
 const UserTable = ({ users, onDelete, onDownload, onEdit, onToggleStatus, onResetUsage, getSubscriptionLink }) => {
   const { t } = useTranslation();
+  const [copyFeedback, setCopyFeedback] = useState({ id: null, status: null });
 
   const formatTrafficGB = (bytes) => {
     if (bytes === null || bytes === undefined) return '-';
@@ -32,44 +34,88 @@ const UserTable = ({ users, onDelete, onDownload, onEdit, onToggleStatus, onRese
     return `${usedText} / ${totalText} GB`;
   };
 
-  const handleCopyLink = (user) => {
-    if (!getSubscriptionLink) return;
-    const link = getSubscriptionLink(user) || '';
+  const showCopyFeedback = (user, status) => {
+    const id = user?.uuid || user?.name;
+    setCopyFeedback({ id, status });
+    window.setTimeout(() => {
+      setCopyFeedback((current) => (current.id === id ? { id: null, status: null } : current));
+    }, 1600);
+  };
 
-    if (navigator.clipboard && window.isSecureContext) {
-      navigator.clipboard.writeText(link).then(() => {
-        window.alert(t('copied_subscription_link', 'Subscription link copied!'));
-      }).catch(() => {
-        fallbackCopyTextToClipboard(link);
-      });
-    } else {
-      fallbackCopyTextToClipboard(link);
+  const copyLabelFor = (user) => {
+    const id = user?.uuid || user?.name;
+    if (copyFeedback.id !== id) return t('copySubscriptionLink', 'Copy');
+    if (copyFeedback.status === 'copied') return t('copied_subscription_link', 'Copied');
+    if (copyFeedback.status === 'empty') return t('copy_no_link', 'No link');
+    if (copyFeedback.status === 'failed') return t('copy_failed', 'Failed');
+    return t('copySubscriptionLink', 'Copy');
+  };
+
+  const copyColorFor = (user) => {
+    const id = user?.uuid || user?.name;
+    if (copyFeedback.id !== id) return '#90caf9';
+    if (copyFeedback.status === 'copied') return '#4caf50';
+    return '#ff9800';
+  };
+
+  const handleCopyLink = async (user) => {
+    if (!getSubscriptionLink) {
+      showCopyFeedback(user, 'empty');
+      return;
+    }
+    const link = getSubscriptionLink(user) || '';
+    if (!link) {
+      showCopyFeedback(user, 'empty');
+      return;
+    }
+
+    const copied = await copyTextToClipboard(link);
+    showCopyFeedback(user, copied ? 'copied' : 'failed');
+    if (!copied) {
+      console.warn('Failed to copy subscription link:', link);
     }
   };
 
-  // Fallback for insecure context (http)
-  function fallbackCopyTextToClipboard(text) {
+  // Works on both HTTPS and plain HTTP/IP panels.
+  async function copyTextToClipboard(text) {
+    if (navigator.clipboard && window.isSecureContext) {
+      try {
+        await navigator.clipboard.writeText(text);
+        return true;
+      } catch {
+        // Fall through to textarea fallback.
+      }
+    }
+
     const textArea = document.createElement('textarea');
     textArea.value = text;
+    textArea.setAttribute('readonly', '');
     textArea.style.position = 'fixed';
-    textArea.style.top = 0;
-    textArea.style.left = 0;
-    textArea.style.width = '2em';
-    textArea.style.height = '2em';
-    textArea.style.padding = 0;
-    textArea.style.border = 'none';
-    textArea.style.outline = 'none';
-    textArea.style.boxShadow = 'none';
-    textArea.style.background = 'transparent';
+    textArea.style.top = '-1000px';
+    textArea.style.left = '-1000px';
+    textArea.style.opacity = '0';
     document.body.appendChild(textArea);
+
+    const selection = document.getSelection();
+    const selectedRange = selection && selection.rangeCount > 0 ? selection.getRangeAt(0) : null;
+
+    textArea.focus();
     textArea.select();
+    textArea.setSelectionRange(0, text.length);
+
+    let copied = false;
     try {
-      document.execCommand('copy');
-      window.alert(t('copied_subscription_link', 'Subscription link copied!'));
-    } catch (err) {
-      window.alert(t('copy_failed', 'Failed to copy link.'));
+      copied = document.execCommand('copy');
+    } catch {
+      copied = false;
     }
+
     document.body.removeChild(textArea);
+    if (selectedRange && selection) {
+      selection.removeAllRanges();
+      selection.addRange(selectedRange);
+    }
+    return copied;
   }
 
   return (
@@ -126,11 +172,27 @@ const UserTable = ({ users, onDelete, onDownload, onEdit, onToggleStatus, onRese
                   />
                   <button
                     className="icon-btn btn-copy"
-                    title={t('copySubscriptionLink', 'Copy Link')}
+                    title={copyLabelFor(user)}
+                    type="button"
                     onClick={() => handleCopyLink(user)}
-                    style={{ background: 'none', border: 'none', padding: 0, marginLeft: 6, cursor: 'pointer' }}
+                    style={{
+                      background: 'rgba(144, 202, 249, 0.08)',
+                      border: '1px solid rgba(144, 202, 249, 0.35)',
+                      borderRadius: 6,
+                      padding: '4px 8px',
+                      marginLeft: 6,
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 5,
+                      color: copyColorFor(user),
+                      fontSize: 12,
+                      minWidth: 72,
+                      justifyContent: 'center',
+                    }}
                   >
-                    <FiCopy style={{ fontSize: 20, color: '#90caf9' }} />
+                    <FiCopy style={{ fontSize: 16, color: copyColorFor(user) }} />
+                    <span>{copyLabelFor(user)}</span>
                   </button>
                 </td>
               </tr>

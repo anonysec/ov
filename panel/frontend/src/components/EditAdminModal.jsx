@@ -43,7 +43,7 @@ const EditAdminModal = ({ admin, onClose, onAdminUpdated }) => {
         try {
             const response = await apiClient.put('/admin/', formData);
             if (response.data.success) {
-                alert(t('adminUpdatedSuccess'));
+                console.warn(t('adminUpdatedSuccess'));
                 onAdminUpdated();
             } else {
                 setError(response.data.msg || t('unableToUpdateAdmin'));

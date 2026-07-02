@@ -75,13 +75,13 @@ const AdminManagement = () => {
         try {
             const response = await apiClient.delete(`/admin/${admin.username}`);
             if (response.data.success) {
-                alert(t('adminDeletedSuccess'));
+                console.warn(t('adminDeletedSuccess'));
                 fetchAdmins();
             } else {
-                alert(response.data.msg || t('unableToDeleteAdmin'));
+                console.warn(response.data.msg || t('unableToDeleteAdmin'));
             }
         } catch {
-            alert(t('errorDeletingAdmin'));
+            console.warn(t('errorDeletingAdmin'));
         }
     };
 

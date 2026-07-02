@@ -76,10 +76,10 @@ const UserManagement = () => {
     if (!window.confirm(`Are you sure you want to delete user ${name}?`)) return;
     try {
       await apiClient.delete(`/users/${uuid}`);
-      alert(`User ${name} deleted successfully.`);
+      console.warn(`User ${name} deleted successfully.`);
       fetchUsers();
     } catch {
-      alert('Error deleting user.');
+      console.warn('Error deleting user.');
     }
   };
 
@@ -95,13 +95,13 @@ const UserManagement = () => {
         expiry_date: null
       });
       if (response.data.success) {
-        alert(`User ${statusLabel}d successfully.`);
+        console.warn(`User ${statusLabel}d successfully.`);
         fetchUsers();
       } else {
-        alert(`Failed to ${statusLabel} user.`);
+        console.warn(`Failed to ${statusLabel} user.`);
       }
     } catch {
-      alert(`Error ${statusLabel}ing user.`);
+      console.warn(`Error ${statusLabel}ing user.`);
     }
   };
 
@@ -111,13 +111,13 @@ const UserManagement = () => {
     try {
       const response = await apiClient.get(`/users/${user.uuid}`);
       if (response.data.success) {
-        alert(`Usage for ${user.name} has been reset.`);
+        console.warn(`Usage for ${user.name} has been reset.`);
         fetchUsers();
       } else {
-        alert(`Failed to reset usage for ${user.name}.`);
+        console.warn(`Failed to reset usage for ${user.name}.`);
       }
     } catch {
-      alert('Error resetting usage.');
+      console.warn('Error resetting usage.');
     }
   };
 

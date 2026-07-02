@@ -140,7 +140,7 @@ def _patch_server_conf() -> bool:
         ln.strip().startswith("status-version") for ln in lines
     )
     if not has_status_version:
-        to_add.append("status-version 3")
+        to_add.append("status-version 2")
 
     if not to_add:
         return False

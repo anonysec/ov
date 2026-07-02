@@ -65,7 +65,7 @@ const EditNodeModal = ({ node, onClose, onNodeUpdated }) => {
     try {
       const response = await apiClient.put(`/nodes/${node.id}`, payload);
       if (response.data.success) {
-        alert('Node updated successfully.');
+        console.warn('Node updated successfully.');
         onNodeUpdated();
       } else {
         setError(response.data.msg || 'Unable to update node.');

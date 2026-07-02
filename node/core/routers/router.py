@@ -18,9 +18,12 @@ router = APIRouter(prefix="/sync", tags=["node_sync"])
 
 
 @router.get("/status", response_model=ResponseModel)
-async def get_status(request: SetSettingsModel, api_key: str = Depends(check_api_key)):
-    """Get the current status of the node and set ovpn settings"""
-    if request.set_new_setting:
+async def get_status(
+    request: SetSettingsModel | None = None,
+    api_key: str = Depends(check_api_key),
+):
+    """Get the current status of the node and optionally set ovpn settings."""
+    if request is not None and request.set_new_setting:
         change_settings = change_config(request)
         if not change_settings:
             return ResponseModel(success=False, msg="Failed to change settings")

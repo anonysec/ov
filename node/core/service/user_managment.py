@@ -88,8 +88,12 @@ def create_user_on_server(name, max_logins: int = 1) -> bool:
     try:
         paths = _client_paths(name)
 
-        # Already generated -> success, just keep CCD and limit in sync.
+        # Already generated -> success, but refresh the cached .ovpn from the
+        # current template when the inline cert exists. This prevents stale
+        # downloads after server-level changes such as port/protocol/cipher/MTU.
         if os.path.exists(paths["ovpn"]):
+            if os.path.exists(paths["inline"]):
+                _generate_ovpn_from_existing_cert(name)
             os.makedirs("/etc/openvpn/ccd", exist_ok=True)
             open(paths["ccd"], "a").close()
             set_user_limit(name, max_logins if max_logins is not None else 1)
@@ -291,8 +295,21 @@ def restart_openvpn_service() -> bool:
 
 
 async def download_ovpn_file(name: str) -> str | None:
-    """Return/generate the path of an OVPN file without infinite recursion."""
-    file_path = f"/root/{name}.ovpn"
+    """Return a fresh OVPN file path without infinite recursion.
+
+    The /root/<name>.ovpn file is a cache generated from
+    /etc/openvpn/server/client-common.txt + the client's inline certificate.
+    Server settings can change later (port/protocol/DNS/cipher/MTU), so a
+    previously cached file may become stale. On every download, regenerate from
+    the current template whenever the inline cert exists.
+    """
+    paths = _client_paths(name)
+    file_path = paths["ovpn"]
+
+    if os.path.exists(paths["inline"]):
+        if _generate_ovpn_from_existing_cert(name):
+            return file_path
+
     if os.path.exists(file_path):
         return file_path
 
@@ -318,23 +335,34 @@ def get_users_usage() -> UsersUsage | None:
 
     for line in lines:
         line = line.strip()
-        if line.startswith("CLIENT_LIST") and not line.startswith(
-            "CLIENT_LIST,Common Name"
-        ):
-            parts = line.split(",")
-            username = parts[1]
-            real_address = parts[2]  # IP:port, unique per active session
-            bytes_received = int(parts[5])
-            bytes_sent = int(parts[6])
-            total_bytes = bytes_received + bytes_sent
+        if not (line.startswith("CLIENT_LIST,") or line.startswith("CLIENT_LIST	")):
+            continue
+        if line.startswith("CLIENT_LIST,Common Name") or line.startswith("CLIENT_LIST	Common Name"):
+            continue
 
-            # Per-CN total (a multi-login user has several rows; sum them).
-            users[username] = users.get(username, 0) + total_bytes
+        parts = line.split("	") if "	" in line else line.split(",")
+        if len(parts) < 7:
+            logger.warning("Skipping malformed OpenVPN CLIENT_LIST line: %s", line)
+            continue
 
-            # Per-session breakdown so the panel can diff each session
-            # independently and avoid double-counting when one of several
-            # simultaneous sessions disconnects.
-            sessions.setdefault(username, {})[real_address] = total_bytes
+        username = parts[1]
+        real_address = parts[2]  # IP:port, unique per active session
+        try:
+            bytes_received = int(parts[5] or 0)
+            bytes_sent = int(parts[6] or 0)
+        except (TypeError, ValueError):
+            logger.warning("Skipping CLIENT_LIST line with invalid byte counters: %s", line)
+            continue
+
+        total_bytes = bytes_received + bytes_sent
+
+        # Per-CN total (a multi-login user has several rows; sum them).
+        users[username] = users.get(username, 0) + total_bytes
+
+        # Per-session breakdown so the panel can diff each session
+        # independently and avoid double-counting when one of several
+        # simultaneous sessions disconnects.
+        sessions.setdefault(username, {})[real_address] = total_bytes
 
     if users:
         return UsersUsage(users=users, sessions=sessions)

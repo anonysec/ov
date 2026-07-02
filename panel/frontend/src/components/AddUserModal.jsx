@@ -35,7 +35,7 @@ const AddUserModal = ({ onClose, onUserAdded }) => {
       };
       const response = await apiClient.post('/users/', payload);
       if (response.data.success) {
-        alert('User created successfully.');
+        console.warn('User created successfully.');
         onUserAdded();
       } else {
         setError(response.data.msg);

@@ -34,7 +34,7 @@ const AddAdminModal = ({ onClose, onAdminCreated }) => {
         try {
             const response = await apiClient.post('/admin/', formData);
             if (response.data.success) {
-                alert(t('adminCreatedSuccess'));
+                console.warn(t('adminCreatedSuccess'));
                 onAdminCreated();
             } else {
                 setError(response.data.msg || t('unableToCreateAdmin'));

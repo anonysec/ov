@@ -41,7 +41,7 @@ const AddNodeModal = ({ onClose, onNodeCreated }) => {
     try {
       const response = await apiClient.post('/nodes/', payload);
       if (response.data.success) {
-        alert('Node created successfully.');
+        console.warn('Node created successfully.');
         onNodeCreated();
       } else {
         setError(response.data.msg || 'Unable to create node.');
